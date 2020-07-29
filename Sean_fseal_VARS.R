@@ -56,7 +56,7 @@ save_dbs = "Extracted raw dive data - from instrument helper/Fur seal data/df/db
 
 
 
-# Looped Data Structuring -------------------------------------------------
+# Data Structuring -------------------------------------------------
 
 fs_list <- list.files(data_path, pattern = ".Rda") # List of ".Rda" files
 system.time({
@@ -110,14 +110,32 @@ system.time({
   # df_init <- df_init_tmp2 %>% 
     # filter(max.d > 15, dur > 60)
   
-  all_dives <- df_init_tmp2 %>% 
-    filter(max.d > 4, dur > 15) %>% 
-    select(gmt,cor.depth)
+  all_dives <- df_init_tmp2 %>% # used in getting dbs and ndbs. 
+    filter(max.d > 4, dur > 15) # shallower dives are assumed to be travelling or caused by waves Kirkman (2019)
   
   # df_bsm <- df_init %>% 
     # select(gmt,cor.depth) 
   
-}) #
+  divestats <- df_init_tmp2 %>% 
+    filter(row_number()==1) %>% 
+    select(-Time,-Depth,-Temperature,-External.Temp,-Light.Level) %>% 
+    mutate("start" = gmt) %>% 
+    select(-gmt)
+  
+  shortlist <- divestats %>% #Probably foraging dives according to Heerah (2014), Heerah (2015), 
+    filter(max.d > 4, dur > 60) #SES - (15m,60sec); Weddels - (4m,60sec)()
+  
+  # Frequency dist of dive depths bi-modal? Two groups of dive depth separated at how many meters?
+  
+  # Can we exclude dives < than a certain depth, from further analysis (% of dives longer than 60 sec?)
+  # as they may indicate non-foraging activities?
+  
+  # According to Arthur (2016) - Only excursions to >6 m were analysed (Staniland & Robinson 2008) as we 
+  # found the broken stick algorithm typically did not fit dives shallower than this (see results).
+  # We found the BSt algorithm typically did not fit short and shallow dives, as the model could not detect 
+  # an inflection point (see Results). Consequently, only dives >40 s of duration were included in the analysis.
+  
+}) 
 
 # Basic Stats per seal -------------------------------------------------------------
 
@@ -128,6 +146,25 @@ system.time({
 
 ## Checking for sampling interval difference between and within dives.
 data.frame(diff(df_init_tmp2$Time)) %>% filter(diff.df_init_tmp2.Time. >1) # where is there missing data? and hoe much is missing?
+
+
+# n_all = All dives 
+n_all <- df_init_tmp2 %.>% unique(.$num) %>% length()
+
+# n_dives = number of dives used in analysis for foraging (sinuosity using BSM - optimal vs low res methods)
+n_dives <- all_dives %.>% unique(.$num) %>% length()
+# n_short = shortlisted dives assumed to include foraging activity
+n_short <- shortlist %.>% unique(.$num) %>% length()
+# n_trans = not actually dives - dives that are part of transit mode
+n_trans <- df_init_tmp2 %.>% unique(.$num) %>% length()
+
+
+# Dive rate according to Kirkman (2019) per seal - dive rate (m/h) were modelled against predictor variables of year & body mass (kg)
+
+dive_rate <- (sum(divestats %>% filter(max.d > 4) %>% select(max.d))*2)/(as.numeric(last(df_init_tmp2$gmt)-first(df_init_tmp2$gmt))*24)
+
+
+# Time of day
 
 
 # #Percentage of foraging dives to resolved dives
@@ -587,6 +624,21 @@ system.time({
 
 
 
+# Add columns to dbs ------------------------------------------------------
+
+dbs <- dbs %>%
+  group_by(num) %>%
+  dplyr::mutate("all.dur" = max(end) - min(start), "max.d" = max(cor.depth), "bottom_depth" = max.d *0.8)  
+
+
+df_init_tmp2 <- df_init_tmp1 %>%
+  filter(cor.depth > bottom_depth) %>%
+  mutate("bottom_time" = max(Time)-min(Time)) %>%
+  select("bottom_time") %>%
+  unique() %>%
+  right_join(df_init_tmp1,by = "num") %>% 
+  movetolast(c("bottom_time")) %>% 
+  mutate("%bt/dt" = bottom_time/dur)
 
 # Examine dive parameters -------------------------------------------------
 
@@ -642,14 +694,53 @@ hour <- format(dout$gmt, "%H", tz="GMT")
 ## Dive summary dataframe before adding information to the locations dataframe
 
 
-divestats <- df_init_tmp2 %>% filter(row_number()==1) %>% select(-Time,-Depth,-Temperature,-External.Temp,-Light.Level) %>% mutate("start" = gmt) %>% select(-gmt)
+# divestats <- df_init_tmp2 %>% filter(row_number()==1) %>% select(-Time,-Depth,-Temperature,-External.Temp,-Light.Level) %>% mutate("start" = gmt) %>% select(-gmt)
 
-divestats <- dbs %>% 
-  group_by(num) %>% 
-  filter(foraging == 2) %>% 
-  summarize("hunting_time" = sum(dur)) %>% 
+
+#Need to mutate on a column - "optimalBSM" vs "LowResBSM6"
+################# add column for transit and hunting time per dive according to BSM
+ht_dbs <- dbs %>%
+  group_by(num) %>%
+  filter(foraging == 2) %>%
+  summarize("hunting_time" = sum(dur))
+
+
+time_cols_dbs <- dbs %>%
+  group_by(num) %>%
+  filter(foraging == 1) %>%
+  summarize("transit_time" = sum(dur)) %>% 
+  full_join(ht_dbs)
+
+ht_ndbs <- ndbs %>%
+  group_by(num) %>%
+  filter(foraging == 2) %>%
+  summarize("hunting_time" = sum(dur))
+
+
+time_cols_ndbs <- ndbs %>%
+  group_by(num) %>%
+  filter(foraging == 1) %>%
+  summarize("transit_time" = sum(dur)) %>% 
+  full_join(ht_ndbs) %>% 
+  arrange(num)
+
+divestats <- bind_rows(time_cols_dbs,time_cols_ndbs) %>% 
+  arrange(num) %>% 
+  replace_na(list(hunting_time = 0, transit_time = 0)) %>% 
   right_join(divestats,by = "num") %>% 
-  movetolast(c("hunting_time"))
+  arrange(num) %>% 
+  movetolast(c("hunting_time","transit_time")) %>% 
+  mutate(hunting_time = replace_na(hunting_time, 0), transit_time = ifelse(is.na(transit_time),dur,transit_time))
+  
+################# add column for wiggle rate - another proxy for foraging effort according to Krause (2016)
+# >2 wiggles/min is considering to indicate foraging behaviour
+
+dbs %>%
+  group_by(num) %>%
+  summarize("wiggle_rate" = )
+
+################# try for loop instead:
+# set up variables
 
 
 ## get mean values for each variables 4 hours either side of each location
@@ -657,15 +748,16 @@ divestats <- dbs %>%
 tracks <- read.csv("Marion_FStracks_SSMresults_2009W_2015S.csv",sep = ";")
 # str(tracks)
 sealID <- 1
-loc1 <-droplevels(subset(tracks,tracks$id == sealID))
+loc1 <-droplevels(subset(tracks,tracks$id == sealID)) %>% filter(gmt > first(df_init_tmp2$gmt) & gmt < last(df_init_tmp2$gmt))
 loc1$gmt <- strptime(loc1$gmt,format = "%Y-%m-%d %H:%M", tz = "GMT")
+
 diff(loc1$gmt)
 which(diff(loc1$gmt)>3) # where there is missing data
 
 summary_dive_loc <- data.frame("num" = rep(0, 1), "all.dur" = 0, "start" = 0, "end" = 0, "depth_start" = 0, "depth_end" = 0, "seg" = 0, "npoints" = 0,
                                      "dur" = 0, "dur.per" = 0, "coef" = 0, "mean_depth" = 0, "max.depth" = 0, "wiggle" = 0, "sinuosity" = 0, "mean_err" = 0, "foraging" = 0)
 
-shortlist <- divestats %>% filter(max.d > 4, dur > 15)
+
 #set up empty variables
 loc1$dur <- NA  
 loc1$mean_max.d <- NA
@@ -674,7 +766,7 @@ loc1$bottom_time <- NA
 loc1$'%bt/dt' <- NA
 loc1$max_max.d <- NA
 loc1$hunting_time <- NA
-
+loc1$transit_time <- NA
 #2.5 hr interval between locations, therefore chose start of dives that fell into 1.25 hrs either side of each location
 # system.time({
 # for(i in 1:nrow(loc1)) {
@@ -700,27 +792,30 @@ loc1$hunting_time <- NA
 # })
   
     
-
+filtered_divestats <-  divestats %>% filter(max.d > 4,dur>60)
 
 ##run a loop over the location data, grabbing the corresponding dive data
 ##2.5 hr interval between locations, therefore chose start of dives that fell into 1.25 hrs either side of each location
 system.time({
-for(i in 2: (nrow(loc1)-1)) {
+for(i in 1: (nrow(loc1))) {
   print(paste(i,nrow(loc1)-1),sep=" ")
   tmin <- loc1$gmt[i] - (3600*1.25)
   tmax <- loc1$gmt[i] + (3600*1.25)
-  mvar <- shortlist[shortlist$start >= tmin & shortlist$start <= tmax,]
+  mvar <- filtered_divestats[filtered_divestats$start >= tmin & filtered_divestats$start <= tmax,]
   loc1$dur[i] <- mvar$dur %>% mean(na.rm=T)
   loc1$mean_max.d[i] <- mvar$max.d %>% mean(na.rm=T)
   loc1$bottom_depth[i] <- mvar$bottom_depth %>% mean(na.rm=T)
   loc1$bottom_time[i] <- mvar$bottom_time %>% mean(na.rm=T)
   loc1$'%bt/dt'[i] <- mvar$'%bt/dt' %>% mean(na.rm=T)
-  loc1$max_max.d[i] <- mvar$max.d %>% max(na.rm=T)
+  loc1$max_max.d[i] <- mvar$max.d %>% max() #replace_na(NaN)
   loc1$hunting_time[i] <- mvar$hunting_time %>% sum(na.rm=T)
+  loc1$transit_time[i] <- mvar$transit_time %>% sum(na.rm=T)
 }
 })
-
-
+loc1$max_max.d <- loc1$max_max.d %>% replace(loc1$max_max.d == -Inf,NaN) #replaces infinities created by loop with NaN values in max_max.d
+# Testing for errors in data and indicatoion of correct filtering ("filtered_divestats"). 
+# Where has hunting time been calculated (for dives >4m & >15sec), but dives close to location are >4m and 60sec
+which(is.na(loc1$dur) & loc1$hunting_time!=0)
 
 # Simple t-tests and GLM --------------------------------------------------
 
@@ -817,7 +912,8 @@ l <- df2move(loc1,
 
 
 # ggplot()+geom_point(data=loc1, aes(x=lon, y=lat), color=colfun(100)[findInterval(loc1$bottom, fmr.brks)])
-ggplot()+geom_point(data=loc1, aes(x=lon, y=lat), color=loc1$mode)
+ggplot()+geom_point(data=loc1, aes(x=lon, y=lat))+
+  scale_fill_identity(loc1$hunting_time)
 
 
 l<-align_move(l)
