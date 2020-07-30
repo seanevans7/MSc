@@ -140,10 +140,9 @@ out.f
 # head(loc1)
 save.image(out.f)
 
-write.csv(dout,file.path(resDir,paste(seal,"_divesummary.csv")))
+write.csv(out,file.path(resDir,paste(seal,"_divesummary.csv")))
 head(dout)
 write.csv(loc1,file.path(resDir,paste(seal,"_LOCATIONdivesummary.csv")))
-
 
 
 

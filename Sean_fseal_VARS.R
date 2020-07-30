@@ -43,8 +43,11 @@ getwd()
 read_path = "Extracted raw dive data - from instrument helper/Fur seal data"
 save_dt = "Extracted raw dive data - from instrument helper/Fur seal data/dt_before_TDR"
 data_path = "Extracted raw dive data - from instrument helper/Fur seal data/dt_before_TDR"
-save_zoc_df = "Extracted raw dive data - from instrument helper/Fur seal data/df" 
-save_dbs = "Extracted raw dive data - from instrument helper/Fur seal data/df/dbs"
+# save_zoc_df = "Extracted raw dive data - from instrument helper/Fur seal data/df" 
+save_dbs = "bsm_seg_df"
+save_df = "df_init_tmp2"
+save_divestats = "divestats"
+save_loc1 = "loc1"
 # Data frame structuring -----------------------------------------------------
 #fs_list <- list.files(data_path)
 #seal_no <- 1
@@ -196,7 +199,7 @@ dive_rate <- (sum(divestats %>% filter(max.d > 4) %>% select(max.d))*2)/(as.nume
 ##############################################################################################################################
 
 
-num.list<-unique(df_bsm$num)
+num.list<-unique(all_dives$num)
 ### Finding the optimal number of Broken points for each dive
 #length(unique(df[df$dur >30 & df$max.d <15 & df$max.d >4,]$num)) # = 367 dives for sealID == 1
 
@@ -224,7 +227,7 @@ num_seq <- seq(1,100) #first 100 dives    #length(num.list))   ## Make it 'for (
 
 for (d in 1:length(num_seq)) {  ## Make it 'for (d in 100){' to just play with dive num 100
   print(paste(d,"Out of",length(num_seq),sep=" "))
-  dive <- df_bsm[df_bsm$num == num.list[d],]
+  dive <- all_dives[all_dives$num == num.list[d],]
   ndive = num.list[d] #used later on in the model
   # Set up broken stick model for each dive
   np <- c(3:30) ## number of broken stick iterations to see which optimal number of points summarize your dive
@@ -801,9 +804,46 @@ divestats_ <- bind_rows(time_cols_dbs,time_cols_ndbs) %>%
   
 divestats <- divestats %>% left_join(pdsi_df,by="num")
 
-
-
 # Check if any weird data - divestats %>% filter(transit_time==0,hunting_time>0)
+
+
+
+##########################  Prepping dives further for location dive summaries ########################## 
+
+
+## filtered dive summaries that may have foraging
+filtered_divestats <-  divestats %>% filter(max.d > 4,dur>60) 
+
+# Is the seal hunting in this dive or not?
+filtered_divestats$ht_rat <- filtered_divestats$hunting_time/filtered_divestats$transit_time  #hunting to transit ratio
+#visually decide on threshold h below
+densityplot(filtered_divestats$ht_rat[filtered_divestats$ht_rat<4 & filtered_divestats$ht_rat>0])
+
+
+h <- 0.4 #threshold for "ht_rat' above which hunting time is large enough relative to transit time that the dive can be seen as a foraging dive
+# p = % of dives where hunting time is considerably small
+p <- length(filtered_divestats$ht_rat[filtered_divestats$ht_rat>0 & filtered_divestats$ht_rat<h])/length(filtered_divestats$ht_rat)
+# if p < 0.40 , hunting is probably where "hunting" > h
+
+# filtered_divestats$dur == (filtered_divestats$hunting_time + filtered_divestats$transit_time) #Therefore, dur != transit+foraging 
+# This is because we ignore foraging segments <= 4sec long 
+
+#### Adding "hunt_dive" column to divestats and filtered_divestats
+divestats <- filtered_divestats # Needed filtered_divestats to get column data for both dataframes
+  filter(ht_rat > h) %>% 
+  mutate("hunt_dive" = "hunting") %>% 
+  select(num,hunt_dive) %>% 
+  right_join(divestats,by="num") %>% 
+  replace_na(list(hunt_dive = "transit"))
+
+filtered_divestats <- filtered_divestats %>% 
+  filter(ht_rat > h) %>% 
+  mutate("hunt_dive" = "hunting") %>% 
+  select(num,hunt_dive) %>% 
+  right_join(filtered_divestats,by="num") %>% 
+  replace_na(list(hunt_dive = "transit"))
+
+# Can get mean hunting depth for the dive .... (Using mean(dbs$mean_depth[dbs$foraging == "hunting])). Can use this for location summaries
 
 ##########################  Group dives closest to locations and perform summary stats ##########################
 
@@ -856,9 +896,6 @@ loc1$transit_time <- NA
 #   }
 # }
 # })
-  
-    
-filtered_divestats <-  divestats %>% filter(max.d > 4,dur>60) # filtered dive summaries that may have foraging
 
 ##run a loop over the location data, grabbing the corresponding dive data
 ##2.5 hr interval between locations, therefore chose start of dives that fell into 1.25 hrs either side of each location
@@ -876,6 +913,7 @@ for(i in 1: (nrow(loc1))) {
   loc1$max_max.d[i] <- mvar$max.d %>% max() #replace_na(NaN)
   loc1$hunting_time[i] <- mvar$hunting_time %>% sum(na.rm=T)
   loc1$transit_time[i] <- mvar$transit_time %>% sum(na.rm=T)
+  loc1$hunting[i] <- mvar$hunting %>% mean(na.rm=T)
 }
 })
 loc1$max_max.d <- loc1$max_max.d %>% replace(loc1$max_max.d == -Inf,NaN) #replaces infinities created by loop with NaN values in max_max.d
@@ -884,10 +922,10 @@ loc1$max_max.d <- loc1$max_max.d %>% replace(loc1$max_max.d == -Inf,NaN) #replac
 which(is.na(loc1$dur) & loc1$hunting_time!=0)
 
 
-# Is the seal hunting in this dive or not?
-filtered_divestats$hunting_time/filtered_divestats$transit_time >0.1 #hunting
 
 
-
-
-
+# Saving dataframes -------------------------------------------------------
+write.csv(df_init_tmp2,file.path(save_df,paste(sealID,"_df_init_tmp2.csv",sep = "")))
+write.csv(bsm_seg_df,file.path(save_dbs,paste(sealID,"_bsm_seg_df.csv",sep = "")))
+write.csv(divestats,file.path(save_divestats,paste(sealID,"_divestats.csv",sep = "")))
+write.csv(loc1,file.path(save_loc1,paste(sealID,"_loc1.csv")))
