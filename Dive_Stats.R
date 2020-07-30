@@ -51,7 +51,8 @@ filtered_divestats$max.d %>% hist().
 
 
 
-
+plot(divestats %>% filter(pdsi<300,pdsi>0,max.d>20) %>% ungroup() %>% select(pdsi,max.d))
+cor(divestats %>% filter(pdsi<300,pdsi>0,max.d>20) %>% ungroup() %>% select(pdsi,max.d))
 
 
 
