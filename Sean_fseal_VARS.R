@@ -3,6 +3,10 @@
 #####################             A vertical area restricted search method is used.               ############################
 ##############################################################################################################################
 
+
+# Load packages -----------------------------------------------------------
+
+library(broom)
 library(move)
 library(moveVis)
 library(sf)
@@ -44,8 +48,8 @@ read_path = "Extracted raw dive data - from instrument helper/Fur seal data"
 save_dt = "Extracted raw dive data - from instrument helper/Fur seal data/dt_before_TDR"
 data_path = "Extracted raw dive data - from instrument helper/Fur seal data/dt_before_TDR"
 # save_zoc_df = "Extracted raw dive data - from instrument helper/Fur seal data/df" 
-save_dbs = "bsm_seg_df"
-save_df = "df_init_tmp2"
+save_bsm_seg_df = "bsm_seg_df"
+save_df_init_tmp2 = "df_init_tmp2"
 save_divestats = "divestats"
 save_loc1 = "loc1"
 # Data frame structuring -----------------------------------------------------
@@ -71,8 +75,9 @@ system.time({
   ## sets surface intervals within the "surface noise" value to 0
   sn <- 1
   
-  
-  load(paste(data_path,fs_list[1],sep = "/"))
+  ########## Loading seal file ##########
+  sealID <- 1
+  load(paste(data_path,fs_list[sealID],sep = "/"))
   
   df <- dt
   df$gmt <- ISOdatetime(1970, 1, 1, 0, 0, 0, tz = "GMT") + df$Time
@@ -97,7 +102,7 @@ system.time({
   ## Adding "dur", "max.d", "bottom_depth" and "bottom_time" columns to dataframe 
   df_init_tmp1 <- df %>% #df_init_tmp1 used for joining to get df_init_tmp2
     group_by(num) %>%
-    dplyr::mutate("dur" = max(Time) - min(Time), "max.d" = max(cor.depth), "bottom_depth" = max.d *0.8)  
+    dplyr::mutate("all.dur" = max(Time) - min(Time), "max.d" = max(cor.depth), "bottom_depth" = max.d *0.8)  
   
   ## dataframe for all dives in total before shortlisting to analyze
   df_init_tmp2 <- df_init_tmp1 %>%
@@ -117,311 +122,9 @@ system.time({
   ## Dives shortlisted for creating dbs and ndbs - i.e. dives to perform BS algorithm on 
   all_dives <- df_init_tmp2 %>% # used in getting dbs and ndbs. 
     filter(max.d > 4, dur > 15) # shallower dives are assumed to be travelling or caused by waves Kirkman (2019)
-  
-  # df_bsm <- df_init %>% 
-    # select(gmt,cor.depth) 
-  
 
-  ## Original dive profiles for all possible foraging dives 
-  shortlist <- divestats %>% #Probably foraging dives according to Heerah (2014), Heerah (2015), 
-    filter(max.d > 4, dur > 60) #SES - (15m,60sec); Weddels - (4m,60sec)()
-  
-  # Frequency dist of dive depths bi-modal? Two groups of dive depth separated at how many meters?
-  
-  # Can we exclude dives < than a certain depth, from further analysis (% of dives longer than 60 sec?)
-  # as they may indicate non-foraging activities?
-  
-  # According to Arthur (2016) - Only excursions to >6 m were analysed (Staniland & Robinson 2008) as we 
-  # found the broken stick algorithm typically did not fit dives shallower than this (see results).
-  # We found the BSt algorithm typically did not fit short and shallow dives, as the model could not detect 
-  # an inflection point (see Results). Consequently, only dives >40 s of duration were included in the analysis.
   
 }) 
-
-# Basic Stats per seal -------------------------------------------------------------
-
-############################################################################################################################## 
-######################## Description: Some basic stats for diving parameters for each seal.  #################################
-##############################################################################################################################
-
-
-## Checking for sampling interval difference between and within dives.
-boxplot(data.frame(diff(df_init_tmp2$Time)) %>% filter(diff.df_init_tmp2.Time. >10,diff.df_init_tmp2.Time.<30))# where is there missing data? and how much is missing?
-df_init_tmp2[which(diff(df_init_tmp2$Time)>1 & df_init_tmp2$max.d<4),] # Plenty of dives with interval > 1
-n_int_err <- df_init_tmp2[which(diff(df_init_tmp2$Time)>1 & df_init_tmp2$max.d>4),] # In this seal only 2 points in dives with interval > 1
-
-
-# n_all = All dives 
-n_all <- df_init_tmp2 %.>% unique(.$num) %>% length()
-
-# n_dives = number of dives used in analysis for foraging (sinuosity using BSM - optimal vs low res methods)
-n_dives <- all_dives %.>% unique(.$num) %>% length()
-# n_short = shortlisted dives assumed to include foraging activity
-n_short <- shortlist %.>% unique(.$num) %>% length()
-# n_trans = not actually dives - dives that are part of transit mode
-n_trans <- df_init_tmp2 %.>% unique(.$num) %>% length()
-
-
-# Dive rate according to Kirkman (2019) per seal - dive rate (m/h) were modelled against predictor variables of year & body mass (kg)
-
-dive_rate <- (sum(divestats %>% filter(max.d > 4) %>% select(max.d))*2)/(as.numeric(last(df_init_tmp2$gmt)-first(df_init_tmp2$gmt))*24)
-
-
-# Time of day
-
-
-# #Percentage of foraging dives to resolved dives
-# all_dive_no <- length(unique(all_dives$num))
-# dive_no <- df_init %.>% unique(.$num) %>% length()
-# perc <- dive_no/all_dive_no *100
-
-# # mean max depth
-# mean_max_d <- df_init %.>% mean(.$max.d)
-
-# # mean dive duration
-# mean_dur <- df_init %.>% mean(.$dur)
-# mean_no_obs_per_dive <- df_init %>% count() %>% ungroup() %>% select(n) %.>% mean(.$n)
-
-# if mean_no_obs_per_dive != mean_dur or "is not a factor of" - then sampling interval is not constant
-
-# df_init %>% filter(max.d >4) %>% count(max.d) %>% 
-#   ggplot(aes(x = num , y = max.d)) +
-#   geom_count()
-
-
-
-
-
-# Model initialization -------------------------------------------------------------------
-
-############################################################################################################################## 
-######################## Description: Model used to access first 100 dives. Find summary of BSpoints. ########################
-##############################################################################################################################
-
-
-num.list<-unique(all_dives$num)
-### Finding the optimal number of Broken points for each dive
-#length(unique(df[df$dur >30 & df$max.d <15 & df$max.d >4,]$num)) # = 367 dives for sealID == 1
-
-########
-## dataframe in which the dives for which the fit doesn't work will be stored.
-# ncdv = data.frame("num" = 0, "Time" = 0, "Time" = 0, "Depth" = 0, "Temperature" = 0, "External.Temp" = 0,
-#                   "Light.Level" = 0, "sealID" = 0, "species" = 0, "cor.depth" = 0, "beach" = 0, "Temp_int" = 0,
-#                   "Season" = 0, "seal_tag" = 0, "TDR/SPLASH" = 0, "gmt" = 0, "cor.depth" = 0, "dur" = 0,
-#                   "max.d" = 0, "bottom_depth" = 0, "bottom_time" = 0) 
-
-ncdv <- data.frame(matrix(integer(), ncol = 20, nrow = 0), stringsAsFactors = FALSE) %>% 
-  setNames(nm = c(colnames(df_init_tmp2)))
-
-
-dbs <- data.frame("num" = rep(0, 1), "all.dur" = 0, "start" = 0, "end" = 0, "depth_start" = 0, "depth_end" = 0, "seg" = 0, "npoints" = 0,
-                  "dur" = 0, "dur.per" = 0, "coef" = 0, "mean_depth" = 0, "max.depth" = 0, "wiggle" = 0, "sinuosity" = 0, "mean_err" = 0, "foraging" = 0) ## Broken stick dataframe
-
-# df[df$cor.depth == max(df$cor.depth),]
-########
-
-
-# foreach () # install package doparallel
-system.time({
-num_seq <- seq(1,100) #first 100 dives    #length(num.list))   ## Make it 'for (d in 100){' to just play with dive num 100
-
-for (d in 1:length(num_seq)) {  ## Make it 'for (d in 100){' to just play with dive num 100
-  print(paste(d,"Out of",length(num_seq),sep=" "))
-  dive <- all_dives[all_dives$num == num.list[d],]
-  ndive = num.list[d] #used later on in the model
-  # Set up broken stick model for each dive
-  np <- c(3:30) ## number of broken stick iterations to see which optimal number of points summarize your dive
-  npe = rep(NA, 28) ## vector where the average distance between original and reconstructed dive profile is stored
-  npo = rep(NA, 28) ## vector where the number of broken stick points describing the dive profile is stored
-  
-  for (k in 1:length(np)) {
-    ## 2 lines below: selection of the depth and time for the 2 surface points and the maximum depth point - initializing BSM
-    ref <- c(dive$cor.depth[1], max(dive$cor.depth), dive$cor.depth[nrow(dive)])
-    tim <- c(as.numeric(dive$gmt[1]), as.numeric(dive$gmt[dive$cor.depth == max(dive$cor.depth)][1]), as.numeric(dive$gmt[nrow(dive)]))
-    
-    for (i in 1:np[k]) { # selection of the number of iteration: from 3 to 30
-      #plot(as.numeric(dive$gmt), dive$cor.depth, ylim=c(max(dive$cor.depth),0), t="l", ylab="depth (m)", xlab="",xaxt="n")
-      ## plot only if you want to see how the broken stick algorithm is working
-      #points(tim,ref, pch=19, cex=1, col="red")
-      #idem
-      interp <- approx(tim, ref, xout = dive$gmt, method = "linear") ## linear interpolation between broken stick points at TDR time interval
-      #lines(interp,col="red")
-      #idem
-      dif_x <- as.numeric(interp$x - dive$gmt) ## time differences between original and reconstructed profiles
-      dif_y <- interp$y - dive$cor.depth ## depth differences between original and reconstructed profiles
-      dst <- sqrt(dif_x ^ 2 + dif_y ^ 2) ## calculate distances between original and reconstructed profiles in terms of time and vertcal space (depth)
-      
-      ii <- which(dst == max(dst))[1] ## index of the 'first'' data point of maximum difference between original and reconstructed profiles ('first' in case there are two of the same)
-      #points(dive$gmt[ii],dive$cor.depth[ii],col="blue",pch=19,cex=1)
-      ## idem
-      tim <- c(as.numeric(tim), as.numeric(dive$gmt[ii])) ## add new broken stick point time
-      tim <- ISOdatetime(1970, 1, 1, 0, 0, 0, tz = "gmt") + tim
-      ref <- c(ref, dive$cor.depth[ii]) ## add new broken stick point depth
-    }
-    npe[k] = mean(dst) ## average distance between original and reconstructed dive profiles
-    npo[k] = length(tim) ## number of broken stick points describing the dive profile - 'np' selection of the number of iteration: from 3 to 30
-  }
-  
-  ## 2. Defining the optimal number of broken stick points
-  
-  f <- data.frame(npe = npe, npo = npo)
-  #plot(f$npo, f$npe,xlab="nb of points", ylab="mean error") #plot of mean distance between original and reconstructed dive profiles
-  ## according to the number of broken stick points describing the dive
-  ## activate only if you want to check
-  
-  ## Use of a gompertz model to find the curve which best fit our data
-  Asym <- 0;
-  b2 <- -5;
-  b3 <- 0.9
-  fm1 <- -999
-  try(fm1 <- nls(npe ~ SSgompertz(npo, Asym, b2, b3), data = f, control = nls.control(maxiter = 500)), TRUE) ## gompertz model to fit an asymptote
-  ## curve to the mean distance between original and reconstructed dive profiles plot
-  ## Some of these dive are being left out, although they are looking fine?
-  if (class(fm1) == "nls") {
-    ## if the model converged, we can go to the next steps
-    #summary(fm1)
-    tt <- predict(fm1, f$npe)
-    
-    
-    ## plot of the mean distance 
-    #png(paste(fig_path, "WED_BS_", ndive, "_", substr(dive$gmt[1], 1, 10), ".png", sep = ""), pointsize = 12 * 1.5, height = 480 * 1.5, widiveh = 480 * 1.5)
-    
-    #par(mfrow = c(2, 1), mar = c(4, 4, 2, 2))
-    #tit = paste("BS_WED08_", ndive, "_", substr(dive$gmt[1], 1, 10))
-    #plot(f$npo, f$npe, xlab = "nb of points", ylab = "mean error", main = tit)
-    #lines(na.omit(f$npo), tt[1:28], col = "red")
-    
-    ## Plot the linear approximation between the first and last point of the fitted curve
-    t <- data.frame(npe = c(f$npe[1], f$npe[28]), npo = c(f$npo[1], f$npo[28]))
-    interp <- approx(c(f$npo[1], f$npo[28]), c(tt[1], tt[28]), xout = f$npo, method = "linear") # linear interpolation 
-    interp$x <- interp$x[!is.na(interp$x)] # This just makes sure nothing else is selected but x and y
-    interp$y <- interp$y[!is.na(interp$y)]
-    #lines(interp$x, interp$y, col = "blue")
-    
-    ## Looking for the inflexion point which is the furthest point between the fitted curve and the approximation 
-    dif_x <- interp$x - na.omit(f$npo)
-    dif_y <- interp$y - tt[1:28]
-    dst <- sqrt(dif_x ^ 2 + dif_y ^ 2)
-    dm <- f$npo[which(dst == max(dst))]
-    
-    #points(f$npo[which(dst == max(dst))], f$npe[which(dst == max(dst))], pch = 19, col = "red") ## inflexion point
-    
-    
-    ## 3. optimal broken stick method for each dive 
-    
-    ## The two lines below select the optimal number of broken stick points (in their order of appearance in the BS iteration)
-    ## example: surface start point, max. depth point, surface end point + x other points
-    tim = tim[1:dm]
-    ref = ref[1:dm]
-    
-    tim2 <- sort(tim) ## sorts time for use in next loop
-    dep_tim <- as.data.frame(cbind(ref, tim)) ## uses tim (unsorted)
-    dep_tim <- dep_tim[order(tim),] ## then order tim so that tim and ref still correspond within the dataframe
-    
-    #     }
-    #   }
-    # }
-    dbs2 <- data.frame("num" = rep(0, (nrow(dep_tim) - 1)), "all.dur" = 0, "start" = 0, "end" = 0, "depth_start" = 0,
-                       "depth_end" = 0, "seg" = 0, "npoints" = 0, "dur" = 0, "dur.per" = 0, "coef" = 0, "mean_depth" = 0, 
-                       "max.depth" = 0, "wiggle" = 0, "sinuosity" = 0, "mean_err" = 0, "foraging" = 0)
-    
-    ## Loop to calculate the different metrics for each broken stick segments
-    for (n in 1:(nrow(dep_tim) - 1)) {
-      x1 = dep_tim$tim[n] ## start of BS segment
-      x2 = dep_tim$tim[n + 1] ## end of BS segment
-      dbs2$num[n] = ndive
-      # dbs2$all.dur[n] = difftime(dive$gmt[nrow(dive)], dive$gmt[1], tz, units = c("secs")) ## dive duration
-      dbs2$start[n] = x1
-      dbs2$end[n] = x2
-      dbs2$depth_start[n] = dep_tim$ref[n] ## depth of start of BS segment
-      dbs2$depth_end[n] = dep_tim$ref[n + 1] ## depth of end of BS segment
-      dbs2$seg[n] = n ## segment number
-      dbs2$npoints[n] = nrow(dep_tim) ## optimal BS points summarising the original dive profile
-      dbs2$dur[n] = difftime(tim2[n + 1], tim2[n], tz, units = c("secs")) ## duration of the segment in sec.
-      dbs2$dur.per[n] = (dbs2$dur[n] / dbs2$all.dur[n]) * 100 ## % of segment duration according to total dive duration
-      dbs2$coef[n] = (dep_tim$ref[n + 1] - dep_tim$ref[n]) / (x2 - x1) ## slope coefficient of the segment
-      dbs2$mean_depth[n] = mean(dive$cor.depth[which(as.numeric(dive$gmt) == x1):which(as.numeric(dive$gmt) == x2)]) ## mean depth of the segment 
-      ## calculated from original profile depths
-      # dbs2$max.depth[n] = max(dive$cor.depth) ## dive max. depth
-      
-      ## Calculation of vertical sinuosity
-      deuc = abs(dep_tim$ref[n + 1] - dep_tim$ref[n]) ## Vertical distance swum between 2 BS points
-      dobs = sum(abs(diff(dive$cor.depth[which(dive$gmt == x1):which(dive$gmt == x2)]))) ## sum of all the vertical distances swum within a segment from the original profile
-      ## profile between the two corresponding BS depth points
-      dbs2$wiggle[n] = dobs #vertical distance swum by seal within segment
-      dbs2$velocity[n] = dobs/dbs2$dur[n] # speed of swimming between broken stick points
-      dbs2$sinuosity[n] = deuc / dobs ## vertical sinuosity index
-      dbs2$mean_err[n] = f$npe[which(dst == max(dst))] ## mean distance between original and reconstructed dive profiles for the optimal
-      ## number of BS points summarising the dive.
-    }
-
-    #-----------------------------------------------------------------------------------------------------------------------------------      
-    # Add '& dbs2$mean_depth <= 6'
-    ## Dive plot: original dive profile and Broken stick reconstructed profile
-    #sg <- unique(dbs2$seg)
-    #cl <- c("blue", "red")
-    #dbs2$code[dbs2$sinuosity]
-    
-    #plot(as.numeric(dive$gmt), dive$cor.depth, ylim = c(max(dive$cor.depth), 0), t = "l", ylab = "depth (m)", xlab = "", xaxt = "n")
-    #points(tim, ref, pch = 19, cex = 1, col = "black")
-    #lines(approx(tim, ref, xout = dive$gmt, method = "linear"), col = "black")
-    #for (i in 1:length(sg)) {
-    #   lines(c(dbs2$start[dbs2$seg == sg[i]], dbs2$end[dbs2$seg == sg[i]]), c(dbs2$depth_start[dbs2$seg == sg[i]],
-    #   dbs2$depth_end[dbs2$seg == sg[i]]), col = cl[dbs2$foraging][dbs2$seg == sg[i]], lwd = 2.5)
-    #}
-    #axis.POSIXct(1, x = dive$gmt, format = "%H:%M:%S", labels = TRUE, cex.lab = 0.5)
-    #dev.off()
-    #dbs <- dplyr::bind_rows(dbs, dbs2)
-    dbs <- rbind(dbs, dbs2)
-  } else { ncdv <- rbind(ncdv, dive) }
-  
-  if (d == NROW(num_seq)) {
-    dbs <- dbs[-1,]
-  }
-  # if (d == NROW(num.list)) {
-  #   dbs <- dbs[-1,]
-  # }
-}
-## end of if loop for dur>15 & max.d>4
-
-  #save(dbs, file = "17_VDB_2011W_0990468_A160_BSP.Rda")
-### Foraging?:
-#-----------
-## Attribution of behaviour according to vertical sinuosity -- Remind that the sinuosity threshold used here was determined according
-## to the histogram/density plot of vertical sinuosity for every BS segments of every dive
-## so, before setting your threshold at 0.9, check if it suits your dataset (i.e after running the BS on all your dive)
-
-dbs$velocity <- abs(((dbs$depth_end)-(dbs$depth_start))/dbs$dur)
-dbs$foraging <- "hunting" ## "hunting" mode
-dbs$foraging[dbs$sinuosity >= 0.9 & dbs$sinuosity <= 1 & dbs$velocity < 0.4] <- "transit" #NBBBBBBB!!! Check 0.4
-## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
-
-})
-
-#summary of first 100 dives' optimal no of BSPs to use in entire seal dataset
-dbs %>% group_by(num) %>% select(npoints) %>% unique() %>% summary()
-
-dbs %>% group_by(num) %>% select(npoints) %>% unique() %.>% hist(.$npoints)
-
-
-max.npoints <- dbs %>% group_by(num) %>% select(npoints) %>% unique() %.>% max(.$npoints)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # Run Gompertz modelled dives ---------------------------------------------
 #############################################################################################################################
@@ -437,11 +140,14 @@ max.npoints <- dbs %>% group_by(num) %>% select(npoints) %>% unique() %.>% max(.
 
 numlist<-unique(all_dives$num)
 
-ndbs <- data.frame("num" = rep(0, 1), "all.dur" = 0, "start" = 0, "end" = 0, "depth_start" = 0, "depth_end" = 0, "seg" = 0, "npoints" = 0,
-                          "dur" = 0, "dur.per" = 0, "coef" = 0, "mean_depth" = 0, "max.depth" = 0, "wiggle" = 0, "sinuosity" = 0, "mean_err" = 0, "foraging" = 0)
-
-dbs <- data.frame("num" = rep(0, 1), "all.dur" = 0, "start" = 0, "end" = 0, "depth_start" = 0, "depth_end" = 0, "seg" = 0, "npoints" = 0,
-                  "dur" = 0, "dur.per" = 0, "coef" = 0, "mean_depth" = 0, "max.depth" = 0, "wiggle" = 0, "sinuosity" = 0, "mean_err" = 0, "foraging" = 0) ## Broken stick dataframe
+## Broken stick dataframe - optimal npoints
+dbs <- data.frame("num" = rep(0,1), "time_start" = 0, "time_end" = 0, "depth_start" = 0,
+                   "depth_end" = 0, "seg" = 0, "npoints" = 0, "dur" = 0, "coef" = 0, "mean_depth" = 0, 
+                   "wiggle" = 0, "swim_speed" = 0, "sinuosity" = 0, "mean_err" = 0)
+## Broken stick dataframe - Set npoints
+ndbs <- data.frame("num" = rep(0,1), "time_start" = 0, "time_end" = 0, "depth_start" = 0,
+                   "depth_end" = 0, "seg" = 0, "npoints" = 0, "dur" = 0, "coef" = 0, "mean_depth" = 0, 
+                   "wiggle" = 0, "swim_speed" = 0, "sinuosity" = 0, "mean_err" = 0)
 
 
 # foreach () # install package doparallel
@@ -509,9 +215,9 @@ system.time({
       dep_tim <- dep_tim[order(tim),] ## then order tim so that tim and ref still correspond within the dataframe
       
       ## Set up dbs2 dataframe for next dive to append to previous dives
-      dbs2 <- data.frame("num" = rep(0, (nrow(dep_tim) - 1)), "all.dur" = 0, "start" = 0, "end" = 0, "depth_start" = 0,
-                         "depth_end" = 0, "seg" = 0, "npoints" = 0, "dur" = 0, "dur.per" = 0, "coef" = 0, "mean_depth" = 0, 
-                         "max.depth" = 0, "wiggle" = 0, "sinuosity" = 0, "mean_err" = 0, "foraging" = 0)
+      dbs2 <- data.frame("num" = rep(0, (nrow(dep_tim) - 1)), "time_start" = 0, "time_end" = 0, "depth_start" = 0,
+                         "depth_end" = 0, "seg" = 0, "npoints" = 0, "dur" = 0, "coef" = 0, "mean_depth" = 0, 
+                         "wiggle" = 0, "swim_speed" = 0, "sinuosity" = 0, "mean_err" = 0)
       
       ## Loop to calculate the different metrics for each broken stick segments
       for (n in 1:(nrow(dep_tim) - 1)) {
@@ -526,7 +232,7 @@ system.time({
         dbs2$seg[n] = n ## segment number
         dbs2$npoints[n] = nrow(dep_tim) ## optimal BS points summarising the original dive profile
         dbs2$dur[n] = difftime(tim2[n + 1], tim2[n], tz, units = c("secs")) ## duration of the segment in sec.
-        dbs2$dur.per[n] = (dbs2$dur[n] / dbs2$all.dur[n]) * 100 ## % of segment duration according to total dive duration
+        # dbs2$dur.per[n] = (dbs2$dur[n] / dbs2$all.dur[n]) * 100 ## % of segment duration according to total dive duration
         dbs2$coef[n] = (dep_tim$ref[n + 1] - dep_tim$ref[n]) / (x2 - x1) ## slope coefficient of the segment
         dbs2$mean_depth[n] = mean(dive$cor.depth[which(as.numeric(dive$gmt) == x1):which(as.numeric(dive$gmt) == x2)]) ## mean depth of the segment 
         ## calculated from original profile depths
@@ -537,7 +243,7 @@ system.time({
         dobs = sum(abs(diff(dive$cor.depth[which(dive$gmt == x1):which(dive$gmt == x2)]))) ## sum of all the vertical distances swum within a segment from the original profile
         ## profile between the two corresponding BS depth points
         dbs2$wiggle[n] = dobs #vertical distance swum by seal within segment
-        dbs2$velocity[n] = dobs/dbs2$dur[n] # speed of swimming between broken stick points
+        dbs2$swim_speed[n] = dobs/dbs2$dur[n] # speed of swimming between broken stick points
         dbs2$sinuosity[n] = deuc / dobs ## vertical sinuosity index
         dbs2$mean_err[n] = f$npe[which(dst == max(dst))] ## mean distance between original and reconstructed dive profiles for the optimal
         ## number of BS points summarising the dive.
@@ -562,43 +268,43 @@ system.time({
       dep_tim <- dep_tim[order(tim),] ## then order tim so that tim and ref still correspond within the dataframe
       
       ## Set up dbs2 dataframe for next dive to append to previous dives
-      dbs2 <- data.frame("num" = rep(0, (nrow(dep_tim) - 1)), "all.dur" = 0, "start" = 0, "end" = 0, "depth_start" = 0,
-                         "depth_end" = 0, "seg" = 0, "npoints" = 0, "dur" = 0, "dur.per" = 0, "coef" = 0, "mean_depth" = 0, 
-                         "max.depth" = 0, "wiggle" = 0, "sinuosity" = 0, "mean_err" = 0, "foraging" = 0)
-      
+      ndbs2 <- data.frame("num" = rep(0, (nrow(dep_tim) - 1)), "time_start" = 0, "time_end" = 0, "depth_start" = 0,
+                         "depth_end" = 0, "seg" = 0, "npoints" = 0, "dur" = 0, "coef" = 0, "mean_depth" = 0, 
+                         "wiggle" = 0, "swim_speed" = 0, "sinuosity" = 0, "mean_err" = 0)
+
       ## Loop to calculate the different metrics for each broken stick segments
       for (n in 1:(nrow(dep_tim) - 1)) {
         x1 = dep_tim$tim[n] ## start of BS segment
         x2 = dep_tim$tim[n + 1] ## end of BS segment
-        dbs2$num[n] = ndive
-        # dbs2$all.dur[n] = difftime(dive$gmt[nrow(dive)], dive$gmt[1], tz, units = c("secs")) ## dive duration
-        dbs2$start[n] = x1
-        dbs2$end[n] = x2
-        dbs2$depth_start[n] = dep_tim$ref[n] ## depth of start of BS segment
-        dbs2$depth_end[n] = dep_tim$ref[n + 1] ## depth of end of BS segment
-        dbs2$seg[n] = n ## segment number
-        dbs2$npoints[n] = nrow(dep_tim) ## optimal BS points summarising the original dive profile
-        dbs2$dur[n] = difftime(tim2[n + 1], tim2[n], tz, units = c("secs")) ## duration of the segment in sec.
-        dbs2$dur.per[n] = (dbs2$dur[n] / dbs2$all.dur[n]) * 100 ## % of segment duration according to total dive duration
-        dbs2$coef[n] = (dep_tim$ref[n + 1] - dep_tim$ref[n]) / (x2 - x1) ## slope coefficient of the segment
-        dbs2$mean_depth[n] = mean(dive$cor.depth[which(as.numeric(dive$gmt) == x1):which(as.numeric(dive$gmt) == x2)]) ## mean depth of the segment 
+        ndbs2$num[n] = ndive
+        # ndbs2$all.dur[n] = difftime(dive$gmt[nrow(dive)], dive$gmt[1], tz, units = c("secs")) ## dive duration
+        ndbs2$time_start[n] = x1
+        ndbs2$time_end[n] = x2
+        ndbs2$depth_start[n] = dep_tim$ref[n] ## depth of start of BS segment
+        ndbs2$depth_end[n] = dep_tim$ref[n + 1] ## depth of end of BS segment
+        ndbs2$seg[n] = n ## segment number
+        ndbs2$npoints[n] = nrow(dep_tim) ## optimal BS points summarising the original dive profile
+        ndbs2$dur[n] = difftime(tim2[n + 1], tim2[n], tz, units = c("secs")) ## duration of the segment in sec.
+        # ndbs2$dur.per[n] = (ndbs2$dur[n] / ndbs2$all.dur[n]) * 100 ## % of segment duration according to total dive duration
+        ndbs2$coef[n] = (dep_tim$ref[n + 1] - dep_tim$ref[n]) / (x2 - x1) ## slope coefficient of the segment
+        ndbs2$mean_depth[n] = mean(dive$cor.depth[which(as.numeric(dive$gmt) == x1):which(as.numeric(dive$gmt) == x2)]) ## mean depth of the segment 
         ## calculated from original profile depths
-        # dbs2$max.depth[n] = max(dive$cor.depth) ## dive max. depth
+        # ndbs2$max.depth[n] = max(dive$cor.depth) ## dive max. depth
         
         ## Calculation of vertical sinuosity
         deuc = abs(dep_tim$ref[n + 1] - dep_tim$ref[n]) ## Vertical distance swum between 2 BS points
         dobs = sum(abs(diff(dive$cor.depth[which(dive$gmt == x1):which(dive$gmt == x2)]))) ## sum of all the vertical distances swum within a segment from the original profile
         ## profile between the two corresponding BS depth points
-        dbs2$wiggle[n] = dobs #vertical distance swum by seal within segment
-        dbs2$velocity[n] = dobs/dbs2$dur[n] # speed of swimming between broken stick points
-        dbs2$sinuosity[n] = deuc / dobs ## vertical sinuosity index
-        dbs2$mean_err[n] = f$npe[which(dst == max(dst))] ## mean distance between original and reconstructed dive profiles for the optimal
+        ndbs2$wiggle[n] = dobs #vertical distance swum by seal within segment
+        ndbs2$swim_speed[n] = dobs/ndbs2$dur[n] # speed of swimming between broken stick points
+        ndbs2$sinuosity[n] = deuc / dobs ## vertical sinuosity index
+        ndbs2$mean_err[n] = f$npe[which(dst == max(dst))] ## mean distance between original and reconstructed dive profiles for the optimal
         ## number of BS points summarising the dive.
       }
       #-----------------------------------------------------------------------------------------------------------------------------------
       
       ## Append dataframe
-      ndbs <- rbind(ndbs, dbs2) 
+      ndbs <- rbind(ndbs, ndbs2) 
       
       }
     
@@ -620,16 +326,19 @@ system.time({
   ## to the histogram/density plot of vertical sinuosity for every BS segments of every dive
   ## so, before setting your threshold at 0.9, check if it suits your dataset (i.e after running the BS on all your dive)
   
-  dbs$velocity <- abs(((dbs$depth_end)-(dbs$depth_start))/dbs$dur)
-  dbs$foraging <- "hunting" ## "hunting" mode
-  dbs$foraging[dbs$sinuosity >= 0.9 & dbs$sinuosity <= 1 & dbs$velocity < 0.4] <- "transit" ## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
+  dbs$velocity <- abs(((dbs$depth_end)-(dbs$depth_start))/dbs$dur) # Heerah et al (2015) - velocity of low res profile <0.4 = "hunting" 
+  dbs$foraging <- "transit" ## "hunting" mode
+  dbs$foraging[dbs$sinuosity < 0.9 & dbs$velocity < 0.4 & dbs$dur > 4] <- "hunting" ## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
+  dbs$foraging <- as.factor(dbs$foraging)
   dbs$bs_npoints <- "optimal"
+  dbs$bs_npoints <- as.factor(dbs$bs_npoints)
   
   ndbs$velocity <- abs(((ndbs$depth_end)-(ndbs$depth_start))/ndbs$dur)
-  ndbs$foraging <- "hunting" ## "hunting" mode
-  ndbs$foraging[ndbs$sinuosity >= 0.9 & ndbs$sinuosity <= 1 & ndbs$velocity < 0.4] <- "transit" ## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
+  ndbs$foraging <- "transit" ## "hunting" mode
+  ndbs$foraging[ndbs$sinuosity < 0.9 & ndbs$velocity < 0.4 & ndbs$dur > 4] <- "hunting" ## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
+  ndbs$foraging <- as.factor(ndbs$foraging)
   ndbs$bs_npoints <- paste(tm,"set",sep = "_")
-  
+  ndbs$bs_npoints <- as.factor(ndbs$bs_npoints)
 })
 
 
@@ -645,15 +354,18 @@ system.time({
 ################# add column for "all.dur" - duration of the dives. ("dur" - is the duration of each segment within a dive)
 
 
-dbs_tmp <- df_init_tmp2 %>% 
+dbs <- df_init_tmp2 %>% 
   select(max.d,bottom_depth,bottom_time,'%bt/dt') %>% 
   filter(row_number()==1) %>% 
-  right_join(dbs %>% group_by(num) %>% dplyr::mutate("all.dur" = max(end) - min(start)),by = "num")
+  right_join(dbs %>% group_by(num) %>% dplyr::mutate("all.dur" = max(time_end) - min(time_start)),by = "num")
 
-ndbs_tmp <- df_init_tmp2 %>% 
+ndbs <- df_init_tmp2 %>% 
   select(max.d,bottom_depth,bottom_time,'%bt/dt') %>% 
   filter(row_number()==1) %>% 
-  right_join(ndbs %>% group_by(num) %>% dplyr::mutate("all.dur" = max(end) - min(start)),by = "num")
+  right_join(ndbs %>% group_by(num) %>% dplyr::mutate("all.dur" = max(time_end) - min(time_start)),by = "num")
+
+dbs$travel <- dbs$all.dur - dbs$bottom_time ## Travel time within a dive (transit time based on bottom phase method)
+ndbs$travel <- ndbs$all.dur - ndbs$bottom_time
 
 # dbs_tmp <- dbs_tmp %>%
 #   filter(mean_depth > bottom_depth) %>%
@@ -694,7 +406,7 @@ ndbs_tmp <- df_init_tmp2 %>%
 #   unique() %>% 
 #   right_join(ndbs_tmp,by = "num")
 
-bsm_seg_df <-bind_rows(dbs_tmp,ndbs_tmp) %>% arrange(num)
+bsm_seg_df <-bind_rows(dbs,ndbs) %>% arrange(num)
 # densityplot(bsm_seg_df$wiggle_rate)
 
 
@@ -756,63 +468,68 @@ hour <- format(dout$gmt, "%H", tz="GMT")
 ## Dive summary dataframe before adding information to the locations dataframe
 
 # divestats <- df_init_tmp2 %>% filter(row_number()==1) %>% select(-Time,-Depth,-Temperature,-External.Temp,-Light.Level) %>% mutate("start" = gmt) %>% select(-gmt)
-divestats <- df_init_tmp2 %>% 
-  filter(row_number()==1) %>% 
-  select(-Time,-Depth,-Temperature,-External.Temp,-Light.Level) %>% 
-  mutate("start" = gmt) %>% 
-  select(-gmt,-cor.depth)
 
 #Need to mutate on a column - "optimalBSM" vs "LowResBSM6"
 ################# add column for transit and hunting time per dive according to BSM segments - Might want to revise this to use df_init_tmp2
-ht_dbs <- dbs %>%
-  group_by(num) %>%
-  filter(foraging == "hunting",dur>4) %>% #calculate the sum time of all hunting segments, excluding those that are <=4sec long.
-  summarize("hunting_time" = sum(dur))
 
-
-time_cols_dbs <- dbs %>%
+divestats <- bsm_seg_df %>% 
   group_by(num) %>%
   filter(foraging == "transit") %>%
   summarize("transit_time" = sum(dur)) %>% 
-  full_join(ht_dbs)
-
-ht_ndbs <- ndbs %>%
-  group_by(num) %>%
-  filter(foraging == "hunting",dur>4) %>% #calculate the sum time of all hunting segments, excluding those that are <=4sec long.
-  summarize("hunting_time" = sum(dur))
-
-
-time_cols_ndbs <- ndbs %>%
-  group_by(num) %>%
-  filter(foraging == "transit") %>%
-  summarize("transit_time" = sum(dur)) %>% 
-  full_join(ht_ndbs) %>% 
-  arrange(num)
-
-# Add pdsi to divestats
-pdsi <- (((all_dives %>% filter(row_number() == 1))$Time)[-1] - ((all_dives %>% slice(n()))$Time))
-pdsi_df <- tibble(all_dives %>% select(num) %>% unique(),"pdsi" = pdsi)
-
-divestats_ <- bind_rows(time_cols_dbs,time_cols_ndbs) %>% 
+  full_join(bsm_seg_df %>% 
+              group_by(num) %>%
+              filter(foraging == "hunting") %>% #calculate the sum time of all hunting segments
+              summarize("hunting_time" = sum(dur)), by="num") %>% 
   arrange(num) %>% 
-  replace_na(list(hunting_time = 0, transit_time = 0)) %>% 
-  right_join(divestats,by = "num") %>% 
+  full_join(tibble(all_dives %>% 
+                     select(num) %>% 
+                     unique(),
+                   "pdsi" = (((all_dives %>% slice(1))$Time)[-1] - ((all_dives %>% slice(n()))$Time)))) %>% 
+  replace_na(list(hunting_time = 0, transit_time = 0, pdsi = NaN)) %>% 
   arrange(num) %>% 
-  movetolast(c("hunting_time","transit_time")) %>% 
-  mutate(hunting_time = replace_na(hunting_time, 0), transit_time = ifelse(is.na(transit_time),dur,transit_time)) %>% 
-  left_join(pdsi_df,by="num")
-  
-divestats <- divestats %>% left_join(pdsi_df,by="num")
+  right_join(df_init_tmp2 %>% 
+               filter(row_number()==1) %>% 
+               select(-Time,-Depth,-Temperature,-External.Temp,-Light.Level) %>% 
+               mutate("start" = gmt) %>% 
+               select(-gmt,-cor.depth)
+             ,by = "num") %>% 
+  mutate(hunting_time = replace_na(hunting_time, 0), transit_time = ifelse(is.na(transit_time),dur,transit_time))
+divestats$end <- ISOdatetime(1970, 1, 1, 0, 0, 0, tz = "GMT") + (df_init_tmp2 %>% slice(n()))$Time
+
 
 # Check if any weird data - divestats %>% filter(transit_time==0,hunting_time>0)
 
+# Dive rate according to Kirkman (2019) per seal - dive rate (m/h) were modelled against predictor variables of year & body mass (kg)
+# Not accurate for our data (is an under-estimate) because there is missing data between dives 
+dive_rate <- (sum(divestats %>% filter(max.d > 4) %>% select(max.d))*2)/(as.numeric(last(df_init_tmp2$gmt)-first(df_init_tmp2$gmt))*24)
 
+#SES - (15m,60sec); Weddels - (4m,60sec)()
 
+# Frequency dist of dive depths bi-modal? Two groups of dive depth separated at how many meters?
+
+# Can we exclude dives < than a certain depth, from further analysis (% of dives longer than 60 sec?)
+# as they may indicate non-foraging activities?
+
+# According to Arthur (2016) - Only excursions to >6 m were analysed (Staniland & Robinson 2008) as we 
+# found the broken stick algorithm typically did not fit dives shallower than this (see results).
+# We found the BSt algorithm typically did not fit short and shallow dives, as the model could not detect 
+# an inflection point (see Results). Consequently, only dives >40 s of duration were included in the analysis.
 ##########################  Prepping dives further for location dive summaries ########################## 
 
 
 ## filtered dive summaries that may have foraging
-filtered_divestats <-  divestats %>% filter(max.d > 4,dur>60) 
+filtered_divestats <-  divestats %>% filter(max.d > 4,dur>60) #Probably foraging dives according to Heerah (2014), Heerah (2015), 
+#SES - (15m,60sec); Weddels - (4m,60sec)()
+
+# Frequency dist of dive depths bi-modal? Two groups of dive depth separated at how many meters?
+
+# Can we exclude dives < than a certain depth, from further analysis (% of dives longer than 60 sec?)
+# as they may indicate non-foraging activities?
+
+# According to Arthur (2016) - Only excursions to >6 m were analysed (Staniland & Robinson 2008) as we 
+# found the broken stick algorithm typically did not fit dives shallower than this (see results).
+# We found the BSt algorithm typically did not fit short and shallow dives, as the model could not detect 
+# an inflection point (see Results). Consequently, only dives >40 s of duration were included in the analysis.
 
 # Is the seal hunting in this dive or not?
 filtered_divestats$ht_rat <- filtered_divestats$hunting_time/filtered_divestats$transit_time  #hunting to transit ratio
@@ -853,7 +570,7 @@ filtered_divestats <- filtered_divestats %>%
 ## Import tracks analysed by Mia
 tracks <- read.csv("Marion_FStracks_SSMresults_2009W_2015S.csv",sep = ";")
 # str(tracks)
-sealID <- 1
+
 loc1 <-droplevels(subset(tracks,tracks$id == sealID)) %>% filter(gmt > first(df_init_tmp2$gmt) & gmt < last(df_init_tmp2$gmt))
 loc1$gmt <- strptime(loc1$gmt,format = "%Y-%m-%d %H:%M", tz = "GMT")
 
@@ -899,7 +616,7 @@ loc1$transit_time <- NA
 
 ##run a loop over the location data, grabbing the corresponding dive data
 ##2.5 hr interval between locations, therefore chose start of dives that fell into 1.25 hrs either side of each location
-system.time({
+system.time({ 
 for(i in 1: (nrow(loc1))) {
   print(paste(i,nrow(loc1)-1),sep=" ")
   tmin <- loc1$gmt[i] - (3600*1.25)
@@ -925,7 +642,8 @@ which(is.na(loc1$dur) & loc1$hunting_time!=0)
 
 
 # Saving dataframes -------------------------------------------------------
-write.csv(df_init_tmp2,file.path(save_df,paste(sealID,"_df_init_tmp2.csv",sep = "")))
-write.csv(bsm_seg_df,file.path(save_dbs,paste(sealID,"_bsm_seg_df.csv",sep = "")))
+setwd("C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc")
+write.csv(df_init_tmp2,file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.csv",sep = "")))
+write.csv(bsm_seg_df,file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.csv",sep = "")))
 write.csv(divestats,file.path(save_divestats,paste(sealID,"_divestats.csv",sep = "")))
 write.csv(loc1,file.path(save_loc1,paste(sealID,"_loc1.csv")))
