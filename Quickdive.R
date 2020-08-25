@@ -6,40 +6,41 @@
 
 rm(list = ls())
 # Which seal?
-sealtag <- "A303" # used for accessing and loading file 
+sealtag <- "A146" # used for accessing and loading file 
 # (If error = "invalid description argument" then check that seal doesn't have two files associated with it)
-sealID <- 47 # Used for saving file 
+sealID <- 24 # Used for saving file 
 
 
 # Load packages -----------------------------------------------------------
 # library(glob2rx)
-# library(broom)
-# library(move)
-# library(moveVis)
-# library(sf)
-# library(maps)
-# library(mapdata)
-# library(fields)
-# library(lattice)
-# library(effects)
-# library(trip)
-# library(Matrix)
-# library(tidyverse)
-# #library(plyr)
-# library(dplyr)
-# library(ggplot2)
-# library(magrittr)
-# library(diveMove)
-# library(pbapply)
-# library(wrapr)
-# library(stringr)
-# library(lubridate)
-# library(microbenchmark)
-# library(data.table)
-# library(ggplot2)
-# # library(ggstatsplot)
-# library(ncdf4)
-# library(raster)
+library(purrr)
+library(broom)
+library(move)
+library(moveVis)
+library(sf)
+library(maps)
+library(mapdata)
+library(fields)
+library(lattice)
+library(effects)
+library(trip)
+library(Matrix)
+library(tidyverse)
+#library(plyr)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+library(diveMove)
+library(pbapply)
+library(wrapr)
+library(stringr)
+library(lubridate)
+library(microbenchmark)
+library(data.table)
+library(ggplot2)
+# library(ggstatsplot)
+library(ncdf4)
+library(raster)
 
 # Set Working directory and import myFunctions ------------------------------------
 # directories
@@ -52,7 +53,8 @@ save_bsm_seg_df = "bsm_seg_df"
 save_df_init_tmp2 = "df_init_tmp2"
 save_divestats = "divestats"
 save_loc1 = "loc1"
-
+save_dbs = "dbs"
+save_ndbs = "ndbs"
 # Data Structuring -------------------------------------------------
 
 ##############################################################################################################################
@@ -103,11 +105,14 @@ system.time({
     movetolast(c("bottom_time")) %>% 
     mutate("%bt/dt" = bottom_time/all.dur)
   
+  setwd("C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc")
+  saveRDS(df_init_tmp2,file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.rds",sep = "")),compress = TRUE)
+  
   ## Dives shortlisted for creating dbs and ndbs - i.e. dives to perform BS algorithm on 
   ## For faster analysis of foraging > 20m select those dives only for the loop
   all_dives <- df_init_tmp2 %>% # used in getting dbs and ndbs. 
     filter(max.d > 4, all.dur > 60) # shallower dives are assumed to be travelling or caused by waves Kirkman (2019)
-  
+  rm(df_init_tmp2,df_init_tmp1)
   
   
   # Run Gompertz modelled dives ---------------------------------------------
@@ -280,57 +285,75 @@ system.time({
     if (d == NROW(numlist)) {
       dbs <- dbs[-1,]
       ndbs <- ndbs[-1,]
-  }
-
-}
-## end of if loop for max.d>4 & dur>60
+    }
     
-### Foraging?: ################ NBBBBB!!!!!!!!! Check velocity before using threshold of 0.4m/s
-#-----------
-## Attribution of behaviour according to vertical sinuosity -- Remind that the sinuosity threshold used here was determined according
-## to the histogram/density plot of vertical sinuosity for every BS segments of every dive
-## so, before setting your threshold at 0.9, check if it suits your dataset (i.e after running the BS on all your dive)
-
-dbs$velocity <- abs(((dbs$depth_end)-(dbs$depth_start))/dbs$dur) # Heerah et al (2015) - velocity of low res profile <0.4 = "hunting" 
-dbs$foraging <- "transit" ## "hunting" mode
-dbs$foraging[dbs$sinuosity < 0.9 & dbs$velocity < 0.4 & dbs$dur > 4] <- "hunting" ## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
-dbs$foraging <- as.factor(dbs$foraging)
-dbs$bs_npoints <- "optimal"
-dbs$bs_npoints <- as.factor(dbs$bs_npoints)
-
-ndbs$velocity <- abs(((ndbs$depth_end)-(ndbs$depth_start))/ndbs$dur)
-ndbs$foraging <- "transit" ## "hunting" mode
-ndbs$foraging[ndbs$sinuosity < 0.9 & ndbs$velocity < 0.4 & ndbs$dur > 4] <- "hunting" ## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
-ndbs$foraging <- as.factor(ndbs$foraging)
-ndbs$bs_npoints <- paste(tm,"set",sep = "_")
-ndbs$bs_npoints <- as.factor(ndbs$bs_npoints)
+  }
+  ## end of if loop for max.d>4 & dur>60
+  setwd("C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc")
+  saveRDS(dbs,file.path(save_dbs,paste(sealID,"_dbs.rds",sep = "")),compress = TRUE)
+  saveRDS(ndbs,file.path(save_ndbs,paste(sealID,"_ndbs.rds",sep = "")),compress = TRUE)
+  
+  ### Foraging?: ################ NBBBBB!!!!!!!!! Check velocity before using threshold of 0.4m/s
+  #-----------
+  ## Attribution of behaviour according to vertical sinuosity -- Remind that the sinuosity threshold used here was determined according
+  ## to the histogram/density plot of vertical sinuosity for every BS segments of every dive
+  ## so, before setting your threshold at 0.9, check if it suits your dataset (i.e after running the BS on all your dive)
+  if (nrow(dbs)!=0){
+  dbs$velocity <- abs(((dbs$depth_end)-(dbs$depth_start))/dbs$dur) # Heerah et al (2015) - velocity of low res profile <0.4 = "hunting" 
+  dbs$foraging <- "transit" ## "hunting" mode
+  dbs$foraging[dbs$sinuosity < 0.9 & dbs$velocity < 0.4 & dbs$dur > 4] <- "hunting" ## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
+  dbs$foraging <- as.factor(dbs$foraging)
+  dbs$bs_npoints <- "optimal"
+  dbs$bs_npoints <- as.factor(dbs$bs_npoints)
+  }
+  if (nrow(ndbs)!=0){
+  ndbs$velocity <- abs(((ndbs$depth_end)-(ndbs$depth_start))/ndbs$dur)
+  ndbs$foraging <- "transit" ## "hunting" mode
+  ndbs$foraging[ndbs$sinuosity < 0.9 & ndbs$velocity < 0.4 & ndbs$dur > 4] <- "hunting" ## According to Heerah, Hindell, Guinet, and Charrassin (2015) & Heerah (2014)
+  ndbs$foraging <- as.factor(ndbs$foraging)
+  ndbs$bs_npoints <- paste(tm,"set",sep = "_")
+  # ndbs$bs_npoints <- paste(6,"set",sep = "_") #for use if loop stops (i.e. "tm" has not been defined). Here we define it as 6
+  ndbs$bs_npoints <- as.factor(ndbs$bs_npoints)
+  }
 })
-  
-  
-  
-  
+
+
+
+
 # Add columns to dbs & ndbs ------------------------------------------------------
-  
+
 #########################################################################################################
 ######################### This is done for later analysis of segments within dives  #####################
 #########################################################################################################
-
+df_init_tmp2 <- read_rds(file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.rds",sep = "")))
 ################# adding "all.dur" - duration of the dives. ("dur" - is the duration of each segment within a dive)
-
+if (nrow(dbs)!=0){
 dbs <- df_init_tmp2 %>% 
   select(max.d,bottom_depth,bottom_time,'%bt/dt') %>% 
   filter(row_number()==1) %>% 
   right_join(dbs %>% group_by(num) %>% dplyr::mutate("all.dur" = max(time_end) - min(time_start)),by = "num")
-
+}
+if (nrow(ndbs)!=0){
 ndbs <- df_init_tmp2 %>% 
   select(max.d,bottom_depth,bottom_time,'%bt/dt') %>% 
   filter(row_number()==1) %>% 
   right_join(ndbs %>% group_by(num) %>% dplyr::mutate("all.dur" = max(time_end) - min(time_start)),by = "num")
-
+}
+if (nrow(dbs)!=0){
 dbs$travel <- dbs$all.dur - dbs$bottom_time ## Travel time within a dive (transit time based on bottom phase method)
+}
+if (nrow(ndbs)!=0){
 ndbs$travel <- ndbs$all.dur - ndbs$bottom_time
-
-bsm_seg_df <-bind_rows(dbs,ndbs) %>% arrange(num)
+}
+if (nrow(dbs)!=0 | nrow(ndbs)!=0){
+bsm_seg_df <- rbind(dbs %>% ungroup(),ndbs %>% ungroup())
+}
+if (nrow(dbs)==0 & nrow(ndbs)!=0){
+  bsm_seg_df <- ndbs
+}
+if (nrow(ndbs)==0 & nrow(dbs)!=0){
+  bsm_seg_df <- dbs
+}
 bsm_seg_df$vdist <- abs(bsm_seg_df$depth_end - bsm_seg_df$depth_start)
 # Saving important files  ------------------------------------------------------
 
@@ -338,8 +361,5 @@ bsm_seg_df$vdist <- abs(bsm_seg_df$depth_end - bsm_seg_df$depth_start)
 ######################### This is done for later analysis of segments within dives  #####################
 #########################################################################################################
 setwd("C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc")
-write.csv(bsm_seg_df,file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.csv",sep = "")))
-write.csv(df_init_tmp2,file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.csv",sep = "")))
-
-
+saveRDS(bsm_seg_df,file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")),compress = TRUE)
 

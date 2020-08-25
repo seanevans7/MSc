@@ -10,7 +10,7 @@
 
 
 # Load packages -----------------------------------------------------------
- 
+library(purrr)
 library(maps)
 library(mapdata)
 library(fields)
@@ -33,6 +33,29 @@ library(data.table)
 library(ggplot2)
 library(ggstatsplot)
 
+rm(list = ls())
+# Which seal?
+sealtag <- "A146" # used for accessing and loading file 
+# (If error = "invalid description argument" then check that seal doesn't have two files associated with it)
+sealID <- 24 # Used for saving file 
+
+
+
+# Saving/reading files in MSc
+save_bsm_seg_df = "bsm_seg_df"
+save_df_init_tmp2 = "df_init_tmp2"
+save_divestats = "divestats"
+save_loc1 = "loc1"
+save_dbs = "dbs"
+save_ndbs = "ndbs"
+
+
+bsm111 <- read_rds(file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")))
+                   
+                   
+                   
+                   
+                   
 # Basic Stats per seal -------------------------------------------------------------
 
 ############################################################################################################################## 

@@ -19,6 +19,7 @@ library(microbenchmark)
 library(data.table)
 library(ggplot2)
 library(ggstatsplot)
+
 setwd("~/2020/MSc/Computing/Fur seals/Dive data for Sean Evans")
 data_path = "Extracted raw dive data - from instrument helper/Fur seal data/dt_before_TDR"
 
@@ -34,7 +35,7 @@ filename = "Dive Data"
 tdr <- createTDR(time = df$gmt,depth = df$depth, concurrentData = data.frame(df$temp), speed = FALSE, dtime = 1, file = filename)
                  # ,dateCol = 13,depthCol = 2,speed=FALSE,concurrentCols = 3:10, sep=";")
 
-# plotTDR(tdr)
+# plotTDR(tdr, interact=TRUE)
 #start detecting periods of activity (i.e individual dives)
 system.time({
 y<-calibrateDepth(tdr, dive.thr=4, zoc.method='offset', offset=1, dry.thr=3600, wet.thr=30, interp.wet=FALSE,smooth.par=0.1, 
@@ -43,11 +44,11 @@ y<-calibrateDepth(tdr, dive.thr=4, zoc.method='offset', offset=1, dry.thr=3600, 
 z<-diveStats(y,depth.deriv = FALSE)
 })
 
-plotTDR(y, concurVars=c("df.temp"), diveNo = 5, what = "phase",surface=TRUE)
+plotTDR(y, concurVars=c("df.temp"), diveNo = 5, what = "phase",surface=TRUE,interact=FALSE)
 
 #Extracting "postdive.id", "dive.id", "dive.activity" from calibrated tdr file
 # getDAct(y)$dive.activity[70000:71000] #where D=Diving and W=Wet. D is used for numbering dives (with id) and W is used for identifying PDSI
-
+getDAct()
 # getDPhaseLab(y, diveNo = 1:5) #gets dives associated phases 
 # plotDiveModel(y, diveNo=2600)
 
@@ -104,3 +105,4 @@ as.data.frame(extractDive(y, diveNo=as.numeric(c(1,2,3,4,5,6,7,8,9,10))))
 
 
 Shortlist_dives<-as.data.frame(extractDive(y, diveNo=as.numeric(as.numeric((z %>% filter(maxdep >6, divetim > 60) %>% select(num))$num))))
+divesTDR
