@@ -61,64 +61,114 @@
 
 diel.loc <- function(theData) {
   require(maptools)
+  # lubridate assumes a certain timezone and gives attribute SAST (South African Standard Time) to our gmt time, therefore:
+  theData$gmt <- force_tz(theData$gmt, tzone = "GMT", roll = FALSE)
+  theData$local_time <- theData$gmt+(theData$lon/15)*3600 # You divide by 15 because (360 degrees around the earth/24 hours rotation cycle = 15 time zones in hours)
+  theData$local_time <- force_tz(theData$local_time, tzone = "Africa/Addis_Ababa", roll = FALSE)
+  # theData$LOC.TIME <- as.POSIXct(strptime(paste('1970-01-01', format(theData$local_time, '%H:%M:%S')), '%Y-%m-%d %H:%M:%S'), tz='GMT')
   
-  theData$local_time <- theData$gmt+(theData$lon/15)*3600
-  theData$LOC.TIME <- as.POSIXct(strptime(paste('1970-01-01', format(theData$local_time, '%H:%M:%S')), '%Y-%m-%d %H:%M:%S'), tz='GMT')
+  theData$JDay <- format(theData$local_time, '%j') #My Julian days are based on local time (So probably are not called 'Julian days' any more and just 'day of year')
   
-  theData$JDay <- as.numeric(format(theData$gmt, '%j'))
+  # theData$sunrise.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+  #                                dateTime=theData$gmt, direction='sunrise', POSIXct.out=T)$day_frac*24
+  theData$sunrise <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                                 dateTime=theData$local_time, direction='sunrise', POSIXct.out=T)$time
   
-  theData$sunrise.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
-                                 dateTime=theData$gmt, direction='sunrise', POSIXct.out=T)$day_frac*24
-  theData$sunrise.hr <- theData$sunrise.hr+(theData$lon/15)
+  # theData$sunset.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                                # dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$day_frac*24
+  theData$sunset <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                                dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$time
   
-  theData$sunset.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
-                                dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$day_frac*24
-  theData$sunset.hr <- theData$sunset.hr+(theData$lon/15)
+  theData$dawn <- crepuscule(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),             # Astronomical dawn:solarDep = 18 degrees below horizon (e.g. sunset 16:30 dusk 18:10)
+                             solarDep = 12, dateTime=theData$local_time, direction='dawn', POSIXct.out=T)$time # Nautical dawn:solarDep = 12 degrees below horizon - Used by Mia PhD (e.g. sunset 16:30 dusk 17:35)
+                                                                                                           # Civil dawn: solarDep = 6 degrees below horizon
   
-  theData$mirror.time <- 43200-abs(as.numeric(theData$LOC.TIME)-43200)
+  theData$dusk <- crepuscule(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                             solarDep = 12, dateTime=theData$local_time, direction='dusk', POSIXct.out=T)$time
+  
+  theData$mirror.time <- 43200-abs(as.numeric(theData$local_time)-43200)
+  
+  
+  theData$diel_phase[theData$local_time > theData$sunset & theData$local_time < theData$dusk] = 'Dusk'
+  theData$diel_phase[theData$local_time > theData$dusk | theData$local_time < theData$dawn] = 'Night'
+  theData$diel_phase[theData$local_time > theData$dawn & theData$local_time < theData$sunrise] = 'Dawn'
+  theData$diel_phase[theData$local_time > theData$sunrise & theData$local_time < theData$sunset] = 'Day'
+  theData$hour <- format(theData$local_time, "%H")
   
   theData
 }
 
 diel.divestats <- function(theData) {
   require(maptools)
-  
+  theData$start <- force_tz(theData$start, tzone = "GMT", roll = FALSE)
   theData$local_time <- theData$start+(theData$lon/15)*3600
-  theData$LOC.TIME <- as.POSIXct(strptime(paste('1970-01-01', format(theData$local_time, '%H:%M:%S')), '%Y-%m-%d %H:%M:%S'), tz='GMT')
+  theData$local_time <- force_tz(theData$local_time, tzone = "Africa/Addis_Ababa", roll = FALSE)
+ # theData$LOC.TIME <- as.POSIXct(strptime(paste('1970-01-01', format(theData$local_time, '%H:%M:%S')), '%Y-%m-%d %H:%M:%S'), tz='GMT')
   
-  theData$JDay <- as.numeric(format(theData$start, '%j'))
+  theData$JDay <- as.numeric(format(theData$local_time, '%j')) #My Julian days are based on local time (So probably are not called 'Julian days' any more and just 'day of year')
   
-  theData$sunrise.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
-                                 dateTime=theData$start, direction='sunrise', POSIXct.out=T)$day_frac*24
-  theData$sunrise.hr <- theData$sunrise.hr+(theData$lon/15)
+  # theData$sunrise.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+  #                                dateTime=theData$gmt, direction='sunrise', POSIXct.out=T)$day_frac*24
+  theData$sunrise <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                              dateTime=theData$local_time, direction='sunrise', POSIXct.out=T)$time
   
-  theData$sunset.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
-                                dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$day_frac*24
-  theData$sunset.hr <- theData$sunset.hr+(theData$lon/15)
+  # theData$sunset.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+  # dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$day_frac*24
+  theData$sunset <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                             dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$time
   
-  theData$mirror.time <- 43200-abs(as.numeric(theData$LOC.TIME)-43200)
+  theData$dawn <- crepuscule(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),             # Astronomical dawn:solarDep = 18 degrees below horizon (e.g. sunset 16:30 dusk 18:10)
+                             solarDep = 12, dateTime=theData$local_time, direction='dawn', POSIXct.out=T)$time  # Nautical dawn:solarDep = 12 degrees below horizon - Used by Mia PhD (e.g. sunset 16:30 dusk 17:35)
+  # Civil dawn: solarDep = 6 degrees below horizon
+  
+  theData$dusk <- crepuscule(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                             solarDep = 12, dateTime=theData$local_time, direction='dusk', POSIXct.out=T)$time
+  
+  theData$mirror.time <- 43200-abs(as.numeric(theData$local_time)-43200)
+  
+  theData$diel_phase[theData$local_time > theData$sunset & theData$local_time < theData$dusk] = 'Dusk'
+  theData$diel_phase[theData$local_time > theData$dusk | theData$local_time < theData$dawn] = 'Night'
+  theData$diel_phase[theData$local_time > theData$dawn & theData$local_time < theData$sunrise] = 'Dawn'
+  theData$diel_phase[theData$local_time > theData$sunrise & theData$local_time < theData$sunset] = 'Day'
+  theData$hour <- format(theData$local_time, "%H")
   
   theData
 }
 
-diel.bsm <- function(theData) {
+diel.bsm <- function(theData) { 
   require(maptools)
-  theData$start <- ISOdatetime(1970, 1, 1, 0, 0, 0, tz = "GMT") + theData$time_start
-  theData$start <- as.POSIXct(theData$start)
+  theData$start <- as.POSIXct(theData$start,tz = "GMT")
+  theData$start <- force_tz(theData$start, tzone = "GMT", roll = FALSE)
   theData$local_time <- theData$start+(theData$lon/15)*3600
-  theData$LOC.TIME <- as.POSIXct(strptime(paste('1970-01-01', format(theData$local_time, '%H:%M:%S')), '%Y-%m-%d %H:%M:%S'), tz='GMT')
+  theData$local_time <- force_tz(theData$local_time, tzone = "Africa/Addis_Ababa", roll = FALSE)
+  #theData$LOC.TIME <- as.POSIXct(strptime(paste('1970-01-01', format(theData$local_time, '%H:%M:%S')), '%Y-%m-%d %H:%M:%S'), tz='GMT')
   
-  theData$JDay <- as.numeric(format(theData$start, '%j'))
+  theData$JDay <- as.numeric(format(theData$local_time, '%j')) #My Julian days are based on local time (So probably are not called 'Julian days' any more and just 'day of year')
   
-  theData$sunrise.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
-                                 dateTime=theData$start, direction='sunrise', POSIXct.out=T)$day_frac*24
-  theData$sunrise.hr <- theData$sunrise.hr+(theData$lon/15)
+  # theData$sunrise.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+  #                                dateTime=theData$gmt, direction='sunrise', POSIXct.out=T)$day_frac*24
+  theData$sunrise <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                              dateTime=theData$local_time, direction='sunrise', POSIXct.out=T)$time
   
-  theData$sunset.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
-                                dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$day_frac*24
-  theData$sunset.hr <- theData$sunset.hr+(theData$lon/15)
+  # theData$sunset.hr <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+  # dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$day_frac*24
+  theData$sunset <- sunriset(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                             dateTime=theData$local_time, direction='sunset', POSIXct.out=T)$time
   
-  theData$mirror.time <- 43200-abs(as.numeric(theData$LOC.TIME)-43200)
+  theData$dawn <- crepuscule(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),             # Astronomical dawn:solarDep = 18 degrees below horizon (e.g. sunset 16:30 dusk 18:10)
+                             solarDep = 12, dateTime=theData$local_time, direction='dawn', POSIXct.out=T)$time  # Nautical dawn:solarDep = 12 degrees below horizon - Used by Mia PhD (e.g. sunset 16:30 dusk 17:35)
+  # Civil dawn: solarDep = 6 degrees below horizon
+  
+  theData$dusk <- crepuscule(crds=as.matrix(theData[,match(c('lon', 'lat'), names(theData))]),
+                             solarDep = 12, dateTime=theData$local_time, direction='dusk', POSIXct.out=T)$time
+  
+  theData$mirror.time <- 43200-abs(as.numeric(theData$local_time)-43200)
+  
+  theData$diel_phase[theData$local_time > theData$sunset & theData$local_time < theData$dusk] = 'Dusk'
+  theData$diel_phase[theData$local_time > theData$dusk | theData$local_time < theData$dawn] = 'Night'
+  theData$diel_phase[theData$local_time > theData$dawn & theData$local_time < theData$sunrise] = 'Dawn'
+  theData$diel_phase[theData$local_time > theData$sunrise & theData$local_time < theData$sunset] = 'Day'
+  theData$hour <- format(theData$local_time, "%H")
   
   theData
 }
