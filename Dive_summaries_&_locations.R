@@ -41,7 +41,7 @@ library(ncdf4)
 library(raster)
 
 rm(list = ls())
-sealID <- 1 # Used for saving file 
+sealID <- 4 # Used for saving file 
 save_bsm_seg_df = "bsm_seg_df"
 save_df_init_tmp2 = "df_init_tmp2"
 save_divestats = "divestats"
@@ -229,22 +229,34 @@ divestats$dive_efficiency <- (divestats$bottom_time)/(divestats$all.dur + divest
 ##########################  Adding lat, lon & X to divestats ########################## 
 ## Set up dataframes  to add columns lat, lon, X. X is the indexer to join lat lon from loc1 with that of divestats
 # loc1$X <- as.integer(loc1$X) ## Should have been done already above
-tmin <- loc1$gmt
-z <- seq(length(tmin)) ## Have to redefine z for divestats
-z <- z[1:(length(z)-1)]
-z <- cut(divestats$start,breaks = tmin, labels = z)
+
+## Remember this will remove the last 2 locations just so that you can get related times
+loc1$gmt <- force_tz(loc1$gmt, tzone = "GMT", roll = FALSE)
+loc1$X = seq(1:length(loc1$X))
+tmin <- c(loc1$gmt - 1.25*3600,force_tz(as.POSIXct(last(loc1$gmt) + 1.25*3600,tz='GMT'), tzone = "GMT", roll = FALSE))
+z <- seq(length(tmin)-1) ## Have to redefine z for divestats
+#z <- z[1:(length(z)-1)]
+divestats$start <- force_tz(divestats$start, tzone = "GMT", roll = FALSE)
+z <- cut(divestats$start,breaks = tmin, labels = TRUE)
+# divestats <- divestats %>% 
+#   mutate("X" = as.integer(shift(z,-1))) %>% 
+#   left_join(loc1 %>% select(X,lon,lat),by = "X")
 divestats <- divestats %>% 
-  mutate("X" = as.integer(z)) %>% 
+  mutate("X" = as.integer(z,-1)) %>% 
   left_join(loc1 %>% select(X,lon,lat),by = "X")
 divestats[is.na(divestats)] <- 0
-divestats <- divestats %>% filter(lat !=0) 
+
+divestats <- divestats %>% filter(lat !=0)
 
 ##########################  Adding lat, lon to bsm_seg_df ############################################### 
 ## Set up dataframes  to add columns lat, lon. num is the indexer to join lat lon from divestats with that of bsm_seg_df
-tmin <- loc1$gmt
+loc1$gmt <- force_tz(loc1$gmt, tzone = "GMT", roll = FALSE)
+loc1$X = seq(1:length(loc1$X))
+tmin <- loc1$gmt - 1.25*3600 
 z <- seq(length(tmin)) ## Have to redefine z for divestats
 z <- z[1:(length(z)-1)]
 bsm_seg_df$start <- ISOdatetime(1970, 1, 1, 0, 0, 0, tz = "GMT") + bsm_seg_df$time_start
+bsm_seg_df$start <- force_tz(bsm_seg_df$start, tzone = "GMT", roll = FALSE)
 z <- cut(bsm_seg_df$start,breaks = tmin, labels = z)
 bsm_seg_df <- bsm_seg_df %>% 
   ungroup() %>%
@@ -355,7 +367,8 @@ loc1[is.na(loc1)] <- 0
 ##############################################################################
 ## Map the distribution of behaviours
 ggplot() + 
-  geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), data = loc1)
+  geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc1)
+
 
 
 
@@ -374,3 +387,4 @@ saveRDS(loc1,file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")),compress = 
 
 
 
+filtered_divestats <- read_rds(file.path(save_filtered_divestats,paste(1,"_filtered_divestats.rds",sep = "")))

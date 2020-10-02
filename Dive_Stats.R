@@ -10,7 +10,12 @@
 
 
 # Load packages -----------------------------------------------------------
+
 library(purrr)
+library(broom)
+library(move)
+library(moveVis)
+library(sf)
 library(maps)
 library(mapdata)
 library(fields)
@@ -20,9 +25,7 @@ library(trip)
 library(Matrix)
 library(tidyverse)
 #library(plyr)
-library(dplyr)
 library(ggplot2)
-library(magrittr)
 library(diveMove)
 library(pbapply)
 library(wrapr)
@@ -31,13 +34,17 @@ library(lubridate)
 library(microbenchmark)
 library(data.table)
 library(ggplot2)
-library(ggstatsplot)
+# library(ggstatsplot)
+library(ncdf4)
+library(raster)
+library(magrittr)
+library(dplyr)
 
 rm(list = ls())
 # Which seal?
-sealtag <- "A146" # used for accessing and loading file 
+#sealtag <- "A146" # used for accessing and loading file 
 # (If error = "invalid description argument" then check that seal doesn't have two files associated with it)
-sealID <- 24 # Used for saving file 
+sealID <- 2 # Used for saving file 
 
 
 
@@ -48,15 +55,28 @@ save_divestats = "divestats"
 save_loc1 = "loc1"
 save_dbs = "dbs"
 save_ndbs = "ndbs"
+save_divessummary = paste("Plots & Dive Tables/Seal",sealID, sep = "")
 
 
-bsm_seg_df <- read_rds(bsm_seg_df,file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")))
-df_init_tmp2 <- read_rds(df_init_tmp2,file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.rds",sep = "")))
-divestats <- read_rds(divestats,file.path(save_divestats,paste(sealID,"_divestats.rds",sep = "")))
-filtered_divestats <- read_rds(filtered_divestats,file.path(save_filtered_divestats,paste(sealID,"_filtered_divestats.rds",sep = "")))
-loc1 <- read_rds(loc1,file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")))
-                   
-                   
+bsm_seg_df <- read_rds(file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")))
+df_init_tmp2 <- read_rds(file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.rds",sep = "")))
+divestats <- read_rds(file.path(save_divestats,paste(sealID,"_divestats.rds",sep = "")))
+#filtered_divestats <- read_rds(file.path(save_filtered_divestats,paste(sealID,"_filtered_divestats.rds",sep = "")))
+loc1 <- read_rds(file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")))
+
+
+divessummary <- read_csv(file.path(save_divessummary,"divessummary.csv"))
+Fts_summaries <- read.csv('Fts_summaries.csv',sep = ';')
+
+#################### Recalibrating divestats times #################
+#divessummary
+divessummary$local_time = force_tz(divessummary$local_time, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
+divessummary$sunrise = force_tz(divessummary$sunrise, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
+divessummary$sunset = force_tz(divessummary$sunset, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
+divessummary$dawn = force_tz(divessummary$dawn, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
+divessummary$dusk = force_tz(divessummary$dusk, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600
+
+
 # Basic Stats per seal -------------------------------------------------------------
 
 ############################################################################################################################## 
@@ -98,6 +118,7 @@ n_dives <- all_dives %.>% unique(.$num) %>% length()
 
 
 ############# Mean vs media pdsi are very different (Data are skewed heavily to the right)
+# Therefore probably better to use median pdsi
 mean(divestats["pdsi"][divestats['pdsi']>0 & divestats['pdsi']<3600])
 mean(divestats["pdsi"][divestats['pdsi']>0 & divestats['pdsi']>0])
 median(divestats["pdsi"][divestats['pdsi']>0 & divestats['pdsi']<3600])
@@ -110,15 +131,14 @@ divestats %>% filter(diel_phase=='Night') %>% summarise('Night' = mean(max.d))
 # Data Analysis -----------------------------------------------------------
 
 
-dbs %>%  filter(dur == max(dbs$dur))
-dbs %>%  filter(num == 6994) 
-dbs %>% filter(foraging == 2,mean_depth>20) %.>% hist(.$mean_depth)
-dbs %>% filter(foraging == 1,mean_depth>20) %.>% hist(.$mean_depth)
-dbs$mean_depth %>% boxplot()
-dbs %>% filter(foraging == 2,mean_depth>20) %.>% var(.$all.dur)
-var.test((dbs %>% filter(foraging == 2,mean_depth>20) %>% select(mean_depth)),(dbs %>% filter(foraging == 1,mean_depth>20))["mean_depth"])
-t.test((dbs %>% filter(foraging == 2,mean_depth>20) %>% select(mean_depth)),(dbs %>% filter(foraging == 1,mean_depth>20) %>% select(mean_depth)),var.equal = FALSE)
-
+bsm_seg_df %>%  filter(dur == max(bsm_seg_df$dur))
+bsm_seg_df %>%  filter(num == 6994) 
+bsm_seg_df %>% filter(foraging == 'hunting',mean_depth>20) %.>% hist(.$mean_depth)
+bsm_seg_df %>% filter(foraging == 'transit',mean_depth>20) %.>% hist(.$mean_depth)
+bsm_seg_df$mean_depth %>% boxplot()
+bsm_seg_df %>% filter(foraging == 'hunting',mean_depth>20) %.>% var(.$all.dur)
+#var.test((bsm_seg_df %>% filter(foraging == 'hunting',mean_depth>20) %>% dplyr::select(mean_depth)),(bsm_seg_df)["mean_depth"])
+t.test((bsm_seg_df %>% filter(foraging == 'hunting',mean_depth>20) %>% dplyr::select(mean_depth)),(bsm_seg_df %>% filter(foraging == 'transit',mean_depth>20) %>% dplyr::select(mean_depth)),var.equal = FALSE)
 
 
 #Shallow dives vs deep dives
@@ -149,8 +169,8 @@ divestats %>% group_by(diel_phase) %>% filter(hunting_time>0) %>% summarise('n' 
                                                                       'trans_t_s' = sd(transit_time))
 
 qqplot(bsm_seg_df %>% filter(foraging == 'hunting') %>% select(vdist))
-
-
+# Where X is a lat lon ID pair:
+hist((divestats %>% group_by(X) %>% summarise(meanht = mean(hunting_time)))$meanht)
 # Simple t-tests and GLM --------------------------------------------------
 
 
@@ -278,15 +298,12 @@ animate_frames(frames, out_file = "example_1.gif")
 
 
 
-
-
-
 #summary of first 100 dives' optimal no of BSPs to use in entire seal dataset
 dbs <- dbs %>% group_by(num,foraging)
 
 dbs %>% slice(1) %>% select(npoints) %.>% hist(.$npoints) 
 
-bsm_seg_df %>% filter(max.d>20) %>% ungroup() %>% do(tidy(t.test(.$mean_depth ~ .$foraging)))
+bsm_seg_df %>% filter(max.d>20) %>% ungroup() %>% do(tidy(t.test(.$mean_depth ~ .$foraging),alternative="greater"))
 
 bsm_seg_df %>% ungroup() %>% do(tidy(t.test(.$mean_depth ~ .$foraging)))
 bsm_seg_df %>% filter(max.d>20) %>% ungroup() %>% do(tidy(t.test(.$mean_depth ~ .$foraging)))
@@ -297,13 +314,86 @@ abline(lm(dout$duration~dout$depth),col="red")
 
 # Quite r session ---------------------------------------------------------
 
-q("yes")
+#q("yes")
 
 
 
 
-# Plotting  ---------------------------------------------------------------
 
+
+#######################
+
+
+# Simple t-tests and GLMs -------------------------------------------------
+
+# ##Do the behaviours differ in transit vs foraging modes
+# #remember, mode 2 = transit and mode 1 =ARS, while vARS is based on hunting time or 'hunting' vs 'transit'
+
+
+#%% bottom_time
+p_value = tidy(t.test(loc1$bottom_time[loc1['b.5']==1], loc1$bottom_time[loc1['b.5']==2]))['p.value']
+
+par(mfrow=c(1,1))
+##plot the results
+t <- tapply(loc1$bottom_time, loc1['b.5'], mean, na.rm=T)
+s <- tapply(loc1$bottom_time, loc1['b.5'], sd, na.rm=T)
+n <- tapply(loc1$bottom_time, loc1['b.5'], length)
+se <- s/sqrt(n)*2
+mp <- barplot(t, beside = TRUE,
+              col = c("red", "grey"),
+              legend = rownames(t), ylim= c(0,max(t+se, na.rm=T)),
+              main = "Bottom Time", font.main = 4,
+              cex.names = 1.5)
+
+segments(mp, t+se, mp, t-se,  col = "black", lwd = 3)
+
+#%% hunting time
+p_value = tidy(t.test(loc1$hunting_time[loc1['b.5']==1], loc1$hunting_time[loc1['b.5']==2]))['p.value']
+
+par(mfrow=c(1,1))
+##plot the results
+t <- tapply(loc1$hunting_time, loc1['b.5'], mean, na.rm=T)
+s <- tapply(loc1$hunting_time, loc1['b.5'], sd, na.rm=T)
+n <- tapply(loc1$hunting_time, loc1['b.5'], length)
+se <- s/sqrt(n)*2
+mp <- barplot(t, beside = TRUE,
+              col = c("red", "grey"),
+              legend = rownames(t), ylim= c(0,max(t+se, na.rm=T)),
+              main = "Bottom Time", font.main = 4,
+              cex.names = 1.5)
+
+segments(mp, t+se, mp, t-se,  col = "black", lwd = 3)
+
+
+
+
+
+
+
+# Plotting ----------------------------------------------------------------
+
+
+
+################## Plotting ARS where thermocline is present ###########
+sf_Marion <- data.frame("lon" = 37.746368, "lat" = -46.893361) %>% 
+  st_as_sf(coords = c("lon", "lat"),crs=4326,remove = FALSE)
+
+ggplot() + 
+  geom_point(aes(x = lon , y = lat), color='green', size=5,pch = 19,data = (divessummary %>% filter(Thermocline=='present'))[,c(10,30,31)]) +
+  geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='red', data = sf_Marion) +
+  ggtitle(paste('Seal',sealID,sep = " "))
+
+## Map the distribution of a single seals behaviours
+ggplot() + 
+  geom_point(aes(x = lon , y = lat), color='green', size=8,pch = 19,data = (divessummary %>% filter(Thermocline=='present'))[,c(10,30,31)]) +
+  geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc1) +
+  geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='red', data = sf_Marion) +
+  geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc1$heffort)+1, color='red', data = loc1[loc1$'b.5'==2,]) +
+  ggtitle(paste('Seal',sealID,sep = " "))
+
+
+
+# 
 
 ######################  Plotting per hour stats
 x <- divestats$local_time
@@ -343,24 +433,60 @@ splom(divestats %>% ungroup() %>% filter(all.dur>60) %>% select(c(1,16,17,18,19,
 
 
 
+# adding foraging trip to divestats ---------------------------------------
 
-# Simple t-tests and GLMs -------------------------------------------------
 
-# ##Do the behaviours differ in transit vs foraging modes
-# #remember, mode 2 = transit and mode 1 =ARS, while vARS is based on hunting time or 'hunting' vs 'transit'
 
-t.test(loc1$bottom[loc1$mode==1], loc1$bottom[loc1$mode==2])
+sealID <- 1
+save_divessummary = paste("Plots & Dive Tables/Seal",sealID, sep = "")
+divessummary <- read_csv(file.path(save_divessummary,"divessummary.csv"))
+Fts_summaries <- read.csv('Fts_summaries.csv',sep = ';')
 
-par(mfrow=c(1,1))
-##plot the results
-t <- tapply(loc1$bottom, loc1$mode, mean, na.rm=T)
-s <- tapply(loc1$bottom, loc1$mode, sd, na.rm=T)
-n <- tapply(loc1$bottom, loc1$mode, length)
-se <- s/sqrt(n)*2
-mp <- barplot(t, beside = TRUE,
-              col = c("red", "grey"),
-              legend = rownames(t), ylim= c(0,max(t+se, na.rm=T)),
-              main = "Bottom Time", font.main = 4,
-              cex.names = 1.5)
+#################### Recalibrating divestats times #################
+#divessummary
+divessummary$local_time = force_tz(divessummary$local_time, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
+divessummary$sunrise = force_tz(divessummary$sunrise, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
+divessummary$sunset = force_tz(divessummary$sunset, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
+divessummary$dawn = force_tz(divessummary$dawn, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
+divessummary$dusk = force_tz(divessummary$dusk, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600
 
-segments(mp, t+se, mp, t-se,  col = "black", lwd = 3)
+#############
+Fts_summaries_init = Fts_summaries %>% filter(id == sealID) %>% dplyr::select(ft.start,ft.end,meandir,sddirDEG,ani_n)
+
+Fts_summaries_init$ft_ht <- NA # sum of hunting time for all dives within this foraging trip
+
+##run a loop over the foraging trip data, grabbing the corresponding dive data
+system.time({
+  for(i in 1: (nrow(Fts_summaries_init))) {
+    print(paste(i,nrow(Fts_summaries_init)-1),sep=" ")
+    tmin <- Fts_summaries_init$'ft.start'[i]
+    tmax <- Fts_summaries_init$'ft.end'[i]
+    mvar <- divessummary[divessummary$start >= tmin & divessummary$start <= tmax,]
+    Fts_summaries_init$ft_ht[i] <- mvar %>% filter(hunting_time>0) %>% dplyr::select(hunting_time) %>% sum()
+  }
+})
+
+divessummary$ft <- NA # Adding ft column to divestats for later stats
+##run a loop over the divessummary data, grabbing the corresponding foraging trip id
+system.time({
+  for(i in 1: (nrow(Fts_summaries_init))) {
+    print(paste(i,nrow(Fts_summaries_init)-1),sep=" ")
+    tmin <- as.POSIXct(Fts_summaries_init$'ft.start'[i])
+    tmax <- as.POSIXct(Fts_summaries_init$'ft.end'[i])+24*3600
+    divessummary$ft[divessummary$start>=tmin & divessummary$start<=tmax] = i
+  }
+})
+unique(divessummary$ft)
+
+# % of hunting time to total dive time of dives within the mixed layer
+divessummary %>% filter(Thermocline=='absent') %>% summarise(mean(hunting_time)/(mean(transit_time)+mean(hunting_time))*100)
+# % of hunting time to total dive time of dives the mixed layer
+divessummary %>% filter(Thermocline=='present') %>% summarise(mean(hunting_time)/(mean(transit_time)+mean(hunting_time))*100)
+
+
+### Why is there no value for Tmld????????????
+divessummary %>% filter(Tmld>0)
+
+# Add column for bouts
+time_diff <- difftime(divessummary$start, lag(divessummary$start, default = divessummary$start[1]), units = "sec")
+divessummary$bout <- cumsum(ifelse(time_diff<3600*6,0,1))
