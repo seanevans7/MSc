@@ -6,9 +6,9 @@
 
 rm(list = ls())
 # Which seal?
-sealtag <- "A146" # used for accessing and loading file 
+sealtag <- "A240" # used for accessing and loading file 
 # (If error = "invalid description argument" then check that seal doesn't have two files associated with it)
-sealID <- 24 # Used for saving file 
+sealID <- 56 # Used for saving file 
 
 
 # Load packages -----------------------------------------------------------
@@ -74,6 +74,7 @@ system.time({
   sn <- 1
   ## Loading specified seal file
   load(paste(data_path,fs_list[grep(sealtag,fs_list)],sep = "/")) ## should be a dt dataframe
+  #load('Extracted raw dive data - from instrument helper/Fur seal data/dt_before_TDR/70_MP_2013W_10L0221_A482_5sec_a.Rda')
   df <- dt
   rm(dt) ## remove dt for safekeeping 
   df$gmt <- ISOdatetime(1970, 1, 1, 0, 0, 0, tz = "GMT") + df$Time ## change time format

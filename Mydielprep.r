@@ -132,6 +132,12 @@ diel.divestats <- function(theData) {
   theData$diel_phase[theData$local_time > theData$sunrise & theData$local_time < theData$sunset] = 'Day'
   theData$hour <- format(theData$local_time, "%H")
   
+  # theData$diel_phase[theData$local_time > theData$sunset & theData$local_time < theData$dusk+3600] = 'Dusk'
+  # theData$diel_phase[theData$local_time > theData$dusk+3600 | theData$local_time < theData$dawn-3600] = 'Night'
+  # theData$diel_phase[theData$local_time > theData$dawn-3600 & theData$local_time < theData$sunrise] = 'Dawn'
+  # theData$diel_phase[theData$local_time > theData$sunrise & theData$local_time < theData$sunset] = 'Day'
+  # theData$hour <- format(theData$local_time, "%H")
+  
   theData
 }
 

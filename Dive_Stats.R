@@ -34,17 +34,24 @@ library(lubridate)
 library(microbenchmark)
 library(data.table)
 library(ggplot2)
-# library(ggstatsplot)
-library(ncdf4)
+library(ggstatsplot)
+# library(ncdf4)
 library(raster)
 library(magrittr)
 library(dplyr)
+library(rgl)
+library(lme4)
+#require(GGally)
+#require(reshape2)
+#require(compiler)
+#require(parallel)
+#require(boot)
 
 rm(list = ls())
 # Which seal?
 #sealtag <- "A146" # used for accessing and loading file 
 # (If error = "invalid description argument" then check that seal doesn't have two files associated with it)
-sealID <- 2 # Used for saving file 
+sealID <- 25 # Used for saving file 
 
 
 
@@ -67,6 +74,8 @@ loc1 <- read_rds(file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")))
 
 divessummary <- read_csv(file.path(save_divessummary,"divessummary.csv"))
 Fts_summaries <- read.csv('Fts_summaries.csv',sep = ';')
+
+filtered_divestats = divessummary %>% filter(max.d >4, all.dur>60)
 
 #################### Recalibrating divestats times #################
 #divessummary
@@ -143,7 +152,7 @@ t.test((bsm_seg_df %>% filter(foraging == 'hunting',mean_depth>20) %>% dplyr::se
 
 #Shallow dives vs deep dives
 filtered_divestats$max.d %>% plot()
-filtered_divestats$max.d %>% hist().
+filtered_divestats$max.d %>% hist()
 
 
 
@@ -166,7 +175,9 @@ divestats %>% group_by(diel_phase) %>% filter(hunting_time>0) %>% summarise('n' 
                                                                       'Surf_T' = median(External.Temp),
                                                                       'Surf_T_s' = sd(External.Temp),
                                                                       'trans_t' = median(transit_time),
-                                                                      'trans_t_s' = sd(transit_time))
+                                                                      'trans_t_s' = sd(transit_time),
+                                                                      'max_depth'= mean(max.d),
+                                                                      'std_max_depth' = sd(max.d))
 
 qqplot(bsm_seg_df %>% filter(foraging == 'hunting') %>% select(vdist))
 # Where X is a lat lon ID pair:
@@ -180,6 +191,11 @@ hist((divestats %>% group_by(X) %>% summarise(meanht = mean(hunting_time)))$mean
 ####################### shallow vs deep dives, species, age, mass(kg),....                  ############################
 ########################################################################################################################
 
+t.test(loc1$for_effort[loc1$for_effort>0 & loc1$diel_phase=='Dusk'], loc1$for_effort[loc1$for_effort>0 & loc1$diel_phase=='Dawn'])
+t.test(loc1$for_effort[loc1$for_effort>0 & loc1$diel_phase=='Night'], loc1$for_effort[loc1$for_effort>0 & loc1$diel_phase=='Dawn'])
+t.test(loc1$for_effort[loc1$for_effort>0 & loc1$diel_phase=='Night'], loc1$for_effort[loc1$for_effort>0 & loc1$diel_phase=='Dusk'])
+plot3d(loc1$ht_rat,loc1$no_dives,loc1$for_effort)
+
 #Shallow dives vs deep dives
 filtered_divestats$max.d %>% plot()
 filtered_divestats$max.d %>% hist()
@@ -189,30 +205,242 @@ filtered_divestats$max.d %>% hist()
 # #remember, mode 2 = transit and mode 1 =ARS
 t.test(loc1$bottom[loc1$mode==1], loc1$bottom[loc1$mode==2])
 
+boxplot(filtered_divestats$ht_rat ~ filtered_divestats$hunt_dive*filtered_divestats$Thermocline,
+        col=c("white","lightgray"),filtered_divestats)
+boxplot(filtered_divestats$dive_efficiency ~ filtered_divestats$hunt_dive*filtered_divestats$Thermocline,
+        col=c("white","lightgray"),filtered_divestats)
+boxplot(filtered_divestats$dive_efficiency ~ filtered_divestats$hunt_dive*filtered_divestats$diel_phase,
+        col=c("white","lightgray"),filtered_divestats)
+boxplot(-filtered_divestats$Mdepth_hunting ~ filtered_divestats$hunt_dive*filtered_divestats$diel_phase,
+        col=c("white","lightgray"),filtered_divestats)
+boxplot(-filtered_divestats$Mdepth_transit ~ filtered_divestats$hunt_dive*filtered_divestats$diel_phase,
+        col=c("white","lightgray"),filtered_divestats)
+
+Mdepth_hunting.model = lmer(Mdepth_hunting ~ hunt_dive  +
+                              Thermocline + (1|diel_phase), data=filtered_divestats)
+summary(Mdepth_hunting.model)
+
 par(mfrow=c(1,1))
 ##plot the results
-t <- tapply(loc1$bottom, loc1$mode, mean, na.rm=T)
-s <- tapply(loc1$bottom, loc1$mode, sd, na.rm=T)
-n <- tapply(loc1$bottom, loc1$mode, length)
+t <- tapply(filtered_divestats$dive_efficiency, filtered_divestats$Thermocline, mean, na.rm=T)
+s <- tapply(filtered_divestats$dive_efficiency, filtered_divestats$Thermocline, sd, na.rm=T)
+n <- tapply(filtered_divestats$dive_efficiency, filtered_divestats$Thermocline, length)
 se <- s/sqrt(n)*2
 mp <- barplot(t, beside = TRUE,
               col = c("red", "grey"),
               legend = rownames(t), ylim= c(0,max(t+se, na.rm=T)),
-              main = "Bottom Time", font.main = 4,
+              main = "Dive efficiency ~ Thermocline present or absent", font.main = 4,
               cex.names = 1.5)
 
 segments(mp, t+se, mp, t-se,  col = "black", lwd = 3)
 
-t.test(loc1$depth[loc1$mode==1], loc1$depth[loc1$mode==2])
-t.test(loc1$duration[loc1$mode==1], loc1$duration[loc1$mode==2])
-t.test(loc1$travel[loc1$mode==1], loc1$travel[loc1$mode==2])
-t.test(loc1$pdsi[loc1$mode==1], loc1$pdsi[loc1$mode==2])
-t.test(loc1$wiggles[loc1$mode==1], loc1$wiggles[loc1$mode==2])
+t.test(filtered_divestats$'max.d'[filtered_divestats$Thermocline=='present'], filtered_divestats$'max.d'[filtered_divestats$Thermocline=='absent'])
+t.test(filtered_divestats$hunting_time[filtered_divestats$Thermocline=='present'], filtered_divestats$hunting_time[filtered_divestats$Thermocline=='absent'])
+t.test(filtered_divestats$'all.dur'[filtered_divestats$Thermocline=='present'], filtered_divestats$'all.dur'[filtered_divestats$Thermocline=='absent'])
+t.test(filtered_divestats$ht_rat[filtered_divestats$Thermocline=='present'], filtered_divestats$ht_rat[filtered_divestats$Thermocline=='absent'])
+t.test(filtered_divestats$'%bt/dt'[filtered_divestats$Thermocline=='present'], filtered_divestats$'%bt/dt'[filtered_divestats$Thermocline=='absent'])
+t.test(filtered_divestats$mean_Temp[filtered_divestats$Thermocline=='present'], filtered_divestats$mean_Temp[filtered_divestats$Thermocline=='absent'])
 
 ##...but it is best to not do multiple t tests. Better to incorporate everything in one model
 ## in this case the data are binomial so it needs a GLM
-mod.null <- glm(mode-1~+1, family="binomial", data=na.omit(loc1))
-mod1 <- glm(mode-1~depth+duration+bottom+travel+log(pdsi)+wiggles, family="binomial", data=na.omit(loc1))
+mod.null <- glm(b.5-1~+1, family="binomial", data=na.omit(loc1))
+mod1 <- glm(b.5~mean_max.d+all.dur+%bt/dt+hour+ht_rat+heffort, family="binomial", data=na.omit(loc1))
+
+# GLM for location data ---------------------------------------------------
+
+# But we do have random variables i.e. foraging trips and seal ids, Therefore need to use gmler instead of gml !!!!
+
+##############################
+### for_effort ~ mean_Temp ###
+##############################
+
+## Null model for effect of mean_Temp on for_effort
+for_effort.null = lmer(for_effort ~ dive_efficiency + mean_max.d + diel_phase + b.5 + strat_prop + (1|ft), data=na.omit(loc1), REML = FALSE) #+ hour + JDay
+summary(for_effort.null)
+AIC_for_effort.null = AIC(for_effort.null) # = 4130.57
+logLik(for_effort.null) # = -2055.285 (df=10)
+
+## Run model for effect of mean_Temp on for_effort
+for_effort.model = lmer(for_effort ~ mean_Temp + dive_efficiency + mean_max.d + diel_phase + b.5 + strat_prop + (1|ft), data=na.omit(loc1), REML = FALSE) #+ hour + JDay
+summary(for_effort.model)
+#residuals(mod.null)
+# plot(effect("dive_efficiency", for_effort.model))
+# plot(effect("mean_Temp", for_effort.model))
+# plot(effect("mean_max.d", for_effort.model))
+# plot(effect("diel_phase", for_effort.model))
+# plot(effect("b.5", for_effort.model))
+# plot(effect("strat_prop", for_effort.model))
+AIC_for_effort.model = AIC(for_effort.model) # = 4042.495 
+logLik(for_effort.model) # = -2010.248 (df=11)
+
+#Did mean_Temp effect for_effort? (by how much and how?)
+AIC_mod = AIC_for_effort.null - AIC_for_effort.model # Therefore the fixed effect mean_Temp is significant
+#or
+# Likelihood ratio test:
+anova(for_effort.null,for_effort.model)
+
+# End result e.g.: mean_Temp not affecting for_effort (χ2(1)=1e-04,	 p=0.9943),	 - if it were to be effecting it you would state for example: lowering	 it	 by	 about	19.7 Hz (Estimate)	± 5.6	(standard	errors) 
+
+
+
+# Make diel phase a random variable
+# for_effort ~dive_efficiency + mean_Temp + mean_max.d + diel_phase + b.5 + strat_prop + (1|ft)
+mod.null = lmer(for_effort ~ dive_efficiency + mean_Temp + mean_max.d + (1|diel_phase) + b.5 + strat_prop + (1|ft), data=loc1) #+ hour + JDay
+summary(mod.null)
+#residuals(mod.null)
+plot(effect("dive_efficiency", mod.null))
+plot(effect("mean_Temp", mod.null))
+plot(effect("mean_max.d", mod.null))
+#plot(effect("diel_phase", mod.null))
+plot(effect("b.5", mod.null))
+plot(effect("strat_prop", mod.null))
+AIC(mod.null) # = 4058.01 Worse
+logLik(mod.null)
+
+# for_effort ~ mean_Temp + mean_max.d + diel_phase + b.5 + strat_prop + (1|ft)
+mod.null = lmer(for_effort ~ mean_Temp + mean_max.d + diel_phase + b.5 + strat_prop + (1|ft), data=loc1) #+ hour + JDay
+summary(mod.null)
+#residuals(mod.null)
+# plot(effect("dive_efficiency", mod.null))
+# plot(effect("mean_Temp", mod.null))
+# plot(effect("mean_max.d", mod.null))
+# plot(effect("diel_phase", mod.null))
+# plot(effect("b.5", mod.null))
+# plot(effect("strat_prop", mod.null))
+AIC(mod.null) # = 4254.404
+logLik(mod.null)
+
+# for_effort ~ mean_max.d + diel_phase + b.5 + strat_prop
+mod.null = glm(for_effort ~ mean_max.d + diel_phase + b.5 + strat_prop, data=loc1) #+ hour + JDay
+summary(mod.null)
+#residuals(mod.null)
+plot(effect("mean_max.d", mod.null))
+plot(effect("diel_phase", mod.null))
+plot(effect("b.5", mod.null))
+plot(effect("strat_prop", mod.null))
+AIC(mod.null) # = 6856.25
+
+# for_effort ~ mean_max.d + diel_phase + b.5
+mod.null = glm(for_effort ~ mean_max.d + diel_phase + b.5, data=loc1) 
+summary(mod.null)
+#residuals(mod.null)
+plot(effect("mean_max.d", mod.null))
+plot(effect("diel_phase", mod.null))
+plot(effect("b.5", mod.null))
+AIC(mod.null) # = 6856.302 worst
+
+# for_effort ~ diel_phase + b.5
+mod.null = glm(for_effort ~ diel_phase + b.5, data=loc1)
+summary(mod.null)
+#residuals(mod.null)
+plot(effect("diel_phase", mod.null))
+plot(effect("b.5", mod.null))
+AIC(mod.null) # 6854.439 best
+
+
+
+# GLM for divessummary ----------------------------------------------------
+
+
+# We do have random variables e.g. foraging trips, bouts and seal ids, Therefore need to use gmler instead of gml !!!!
+
+##############################
+### ht_rat ~ mean_Temp ###
+##############################
+
+## Null model for effect of mean_Temp on for_effort
+ht_rat.null = lmer(ht_rat ~ dive_efficiency + max.d + all.dur + lon + lat + Thermocline + diel_phase + distances..m. + (1|ft) + (1|bout), data=divessummary, REML = FALSE) #+ hour + JDay
+summary(ht_rat.null)
+AIC_ht_rat.null = AIC(ht_rat.null) # = 4130.57 
+logLik(ht_rat.null) # = -2055.285 (df=10)
+
+## Run model for effect of mean_Temp on for_effort
+ht_rat.model = lmer(ht_rat ~ mean_Temp + dive_efficiency + max.d + all.dur + lon + lat + Thermocline + diel_phase + distances..m. + (1|ft) + (1|bout), data=divessummary, REML = FALSE) #+ hour + JDay
+summary(ht_rat.model)
+#residuals(mod.null)
+plot(effect("mean_Temp", for_effort.model))
+plot(effect("dive_efficiency", for_effort.model))
+plot(effect("max.d", for_effort.model))
+plot(effect("all.dur", for_effort.model))
+plot(effect("lon", for_effort.model))
+plot(effect("lat", for_effort.model))
+plot(effect("Thermocline", for_effort.model))
+plot(effect("diel_phase", for_effort.model))
+plot(effect("distances..m.", for_effort.model))
+AIC_ht_rat.model = AIC(ht_rat.model) # = 4042.495 
+logLik(ht_rat.model) # = -2010.248 (df=11)
+
+#Did mean_Temp effect for_effort? (by how much and how?)
+AIC_mod = AIC_ht_rat.null - AIC_ht_rat.model # Therefore the fixed effect mean_Temp is significant
+#or
+# Likelihood ratio test:
+anova(ht_rat.null,ht_rat.model)
+
+# End result e.g.: mean_Temp	 affected	 for_effort	 (χ2(1)=11.62,	 p=0.00065),	 lowering	 it	 by	 about	19.7 Hz (Estimate)	± 5.6	(standard	errors) 
+
+
+# Lets try something a bit less ambitious
+
+##############################
+### ht_rat ~ mean_Temp ###
+##############################
+
+# Random Intercept Model
+## Null model for effect of mean_Temp on for_effort
+ht_rat.null = lmer(ht_rat ~ diel_phase + (1|ft) + (1|bout), data=filtered_divestats, REML = FALSE) #+ hour + JDay
+summary(ht_rat.null)
+AIC_ht_rat.null = AIC(ht_rat.null) 
+logLik(ht_rat.null)
+
+## Run model for effect of mean_Temp on for_effort
+ht_rat.model_rim = lmer(ht_rat ~ mean_Temp + diel_phase + (1|ft) + (1|bout), data=filtered_divestats, REML = FALSE) #+ hour + JDay
+summary(ht_rat.model_rim)
+#residuals(mod.null)
+plot(effect("mean_Temp", ht_rat.model_rim))
+plot(effect("diel_phase", ht_rat.model_rim))
+AIC_ht_rat.model = AIC(ht_rat.model_rim) 
+logLik(ht_rat.model_rim)
+
+#Did mean_Temp effect for_effort? (by how much and how?)
+AIC_mod = AIC_ht_rat.null - ht_rat.model_rim # Therefore the fixed effect mean_Temp is significant
+#or
+# Likelihood ratio test:
+anova(ht_rat.null,ht_rat.model_rim)
+
+# End result:  mean_Temp	 affected	 ht_rat	 (χ2(1)=74.378  ,	 p=2.2e-16 ***), increasing it by about 0.040973 (Estimate)	± 0.004746 (standard	errors) 
+
+##############################
+### Interactions ????????? ###
+##############################
+# Test for inter-dependence between mean_Temp and diel_phase
+ht_rat.model_inter = lmer(ht_rat ~ mean_Temp*diel_phase + (1|ft) + (1|bout), data=filtered_divestats, REML = FALSE) #+ hour + JDay
+AIC_ht_rat.model_inter = AIC(ht_rat.model_inter)
+AIC_mod = AIC_ht_rat.model_inter - AIC_ht_rat.model
+# Likelihood ratio test:
+anova(ht_rat.model_inter,ht_rat.model)
+
+# End result:  interaction between fixed terms in the model is significant (χ2(1)=30.46  ,	 p=1.104e-06 ***)
+
+coef(ht_rat.model_inter)
+
+
+# Random Slope Model
+## Tells model: Expect differing baseline-levels of ht_rat (the intercept, represented by 1) as well as differing responses to the main factor in question, which is “mean_Temp” in this case. 
+ht_rat.model_rsm = lmer(ht_rat ~ mean_Temp*diel_phase + (1+mean_Temp|ft) + (1|bout), data=filtered_divestats, REML = FALSE) #+ hour + JDay
+coef(ht_rat.model_rsm)
+# Therefore, with individual variation in foraging trip, there is no consistency in how ht_rat is effected by mean_Temp 	
+
+# Now compare with null model to test significance of this
+ht_rat.model_rsm.null = lmer(ht_rat ~ diel_phase + (1+mean_Temp|ft) + (1|bout), data=filtered_divestats, REML = FALSE) #+ hour + JDay
+# Likelihood ratio test:
+anova(ht_rat.model_rsm.null,ht_rat.model_rsm)
+
+# End result:  interaction between fixed terms and random terms in the model is significant (χ2(1)=36.171  ,	 p=2.668e-07 ***)
+
+# Other glm ---------------------------------------------------------------
+
+
+
 summary(mod1)
 AIC(mod.null)-AIC(mod1) ##this value needs to be more than 2 to be confident the models differ
 ##plot up the results - be sure to include only the terms that were indicated as important
@@ -359,7 +587,7 @@ se <- s/sqrt(n)*2
 mp <- barplot(t, beside = TRUE,
               col = c("red", "grey"),
               legend = rownames(t), ylim= c(0,max(t+se, na.rm=T)),
-              main = "Bottom Time", font.main = 4,
+              main = "Hunting Time", font.main = 4,
               cex.names = 1.5)
 
 segments(mp, t+se, mp, t-se,  col = "black", lwd = 3)
@@ -389,6 +617,13 @@ ggplot() +
   geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc1) +
   geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='red', data = sf_Marion) +
   geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc1$heffort)+1, color='red', data = loc1[loc1$'b.5'==2,]) +
+  ggtitle(paste('Seal',sealID,sep = " "))
+## Map the distribution of a single seals behaviours
+ggplot() + 
+  geom_point(aes(x = lon , y = lat), color='green', size=8,pch = 19,data = (divessummary %>% filter(Thermocline=='present'))[,c(10,30,31)]) +
+  geom_point(aes(x = lon , y = lat, color = hunting_time, size = for_effort), pch = 19,data = loc1) +
+  geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='red', data = sf_Marion) +
+  geom_point(aes(x = lon , y = lat),pch = 1,size=1, color='red', data = loc1[loc1$'b.5'==2,]) +
   ggtitle(paste('Seal',sealID,sep = " "))
 
 
@@ -433,17 +668,26 @@ splom(divestats %>% ungroup() %>% filter(all.dur>60) %>% select(c(1,16,17,18,19,
 
 
 
+
+
+
+
+
+
+
+
 # adding foraging trip to divestats ---------------------------------------
 
 
 
-sealID <- 1
+sealID <- 25
 save_divessummary = paste("Plots & Dive Tables/Seal",sealID, sep = "")
-divessummary <- read_csv(file.path(save_divessummary,"divessummary.csv"))
+divessummary <- read.csv(file.path(save_divessummary,"divessummary.csv"),sep=',')
 Fts_summaries <- read.csv('Fts_summaries.csv',sep = ';')
 
 #################### Recalibrating divestats times #################
 #divessummary
+divessummary$start =  force_tz(as.POSIXct(divessummary$start), tzone='GMT')
 divessummary$local_time = force_tz(divessummary$local_time, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
 divessummary$sunrise = force_tz(divessummary$sunrise, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
 divessummary$sunset = force_tz(divessummary$sunset, tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600 
@@ -467,6 +711,7 @@ system.time({
 })
 
 divessummary$ft <- NA # Adding ft column to divestats for later stats
+
 ##run a loop over the divessummary data, grabbing the corresponding foraging trip id
 system.time({
   for(i in 1: (nrow(Fts_summaries_init))) {
@@ -483,10 +728,71 @@ divessummary %>% filter(Thermocline=='absent') %>% summarise(mean(hunting_time)/
 # % of hunting time to total dive time of dives the mixed layer
 divessummary %>% filter(Thermocline=='present') %>% summarise(mean(hunting_time)/(mean(transit_time)+mean(hunting_time))*100)
 
-
-### Why is there no value for Tmld????????????
-divessummary %>% filter(Tmld>0)
-
 # Add column for bouts
 time_diff <- difftime(divessummary$start, lag(divessummary$start, default = divessummary$start[1]), units = "sec")
 divessummary$bout <- cumsum(ifelse(time_diff<3600*6,0,1))
+
+
+
+# Adding hARS_mode to divessummary ----------------------------------------
+
+# Adding hARS_mode column to divestats for later stats
+tmin <- c(loc1$gmt - 1.25*3600,force_tz(as.POSIXct(last(loc1$gmt) + 1.25*3600,tz='GMT'), tzone = "GMT", roll = FALSE))
+z <- seq(length(tmin)-1) ## Have to redefine z for divestats
+#z <- z[1:(length(z)-1)]
+divessummary$start <- force_tz(divessummary$start, tzone = "GMT", roll = FALSE)
+z <- cut(divessummary$start,breaks = tmin, labels = z)
+# divestats <- divestats %>% 
+#   mutate("X" = as.integer(shift(z,-1))) %>% 
+#   left_join(loc1 %>% select(X,lon,lat),by = "X")
+divessummary <- divessummary %>% 
+  mutate("X" = as.integer(z)) %>% 
+  left_join(loc1 %>% select(X,b.5),by = "X")
+colnames(divessummary)[which(names(divessummary) == "b.5")] <- "hARS_mode"
+
+
+
+# Add columns to loc1 -----------------------------------------------------
+
+##############################
+### Add strat_prop to loc1 ###
+##############################
+loc1$strat_prop <- NA # No. of dives that are in stratified water masses
+
+##run a loop over the location data, grabbing the corresponding dive data
+##2.5 hr interval between locations, therefore chose start of dives that fell into 1.25 hrs either side of each location
+system.time({
+  for(i in 1: (nrow(loc1))) {
+    print(paste(i,nrow(loc1)-1),sep=" ")
+    tmin <- loc1$gmt[i] - (3600*1.25)
+    tmax <- loc1$gmt[i] + (3600*1.25)
+    mvar <- filtered_divestats[filtered_divestats$start >= tmin & filtered_divestats$start <= tmax,]
+    if (NROW(mvar %>% filter(Thermocline=='present'))>0) {
+      new_df <- mvar %>% filter(Thermocline=='present')
+      loc1$strat_prop[i] <- NROW(new_df)
+    }
+    else {
+      loc1$strat_prop[i] <- 0
+    }
+  }
+})
+
+##############################
+### Add strat_prop to loc1 ###
+##############################
+
+loc1$mean_Temp <- NA
+loc1$dive_efficiency <- NA
+
+##run a loop over the location data, grabbing the corresponding dive data
+##2.5 hr interval between locations, therefore chose start of dives that fell into 1.25 hrs either side of each location
+system.time({
+  for(i in 1: (nrow(loc1))) {
+    print(paste(i,nrow(loc1)-1),sep=" ")
+    tmin <- loc1$gmt[i] - (3600*1.25)
+    tmax <- loc1$gmt[i] + (3600*1.25)
+    mvar <- divessummary[divessummary$start >= tmin & divessummary$start <= tmax,]
+    loc1$mean_Temp[i] <- mvar$mean_Temp %>% mean(na.rm=T)
+    loc1$dive_efficiency[i] <- mvar$dive_efficiency %>% mean(na.rm=T)
+  }
+})

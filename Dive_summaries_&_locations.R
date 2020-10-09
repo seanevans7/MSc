@@ -39,9 +39,11 @@ library(ggplot2)
 # library(ggstatsplot)
 library(ncdf4)
 library(raster)
+library(rgl)
+library(lme4)
 
 rm(list = ls())
-sealID <- 4 # Used for saving file 
+sealID <- 15# Used for saving file 
 save_bsm_seg_df = "bsm_seg_df"
 save_df_init_tmp2 = "df_init_tmp2"
 save_divestats = "divestats"
@@ -52,6 +54,9 @@ save_ndbs = "ndbs"
 
 
 # dbs & ndbs --------------------------------------------------------------
+
+dbs <- read_csv(file.path(save_dbs,paste(sealID,"_dbs.csv",sep = "")))
+ndbs <- read_csv(file.path(save_ndbs,paste(sealID,"_dbs.csv",sep = "")))
 
 # read_rds(file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.rds",sep = "")))
 dbs <- read_rds(file.path(save_dbs,paste(sealID,"_dbs.rds",sep = "")))
@@ -146,7 +151,6 @@ system.time({
 # gzf
 # Locations ---------------------------------------------------------------
 
-
 #########################################################################################################
 ############################################## For rds files  ###########################################
 #########################################################################################################
@@ -155,6 +159,9 @@ bsm_seg_df <- read_rds(file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",
 df_init_tmp2 <- read_rds(file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.rds",sep = "")))
 bsm_seg_df <- bsm_seg_df %>% group_by(num)
 df_init_tmp2 <- df_init_tmp2 %>% group_by(num) 
+
+# divestats <- read_rds(file.path(save_divestats,paste(sealID,"_divestats.rds",sep = "")))
+# loc1 <- read_rds(file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")))
 ##############################################################################################################################
 ####################### Reading in seal tracks produced by Mia. This will be useful for horizontal   ###############
 #######################         dives and averaging the dives that are > 60sec long.                           ###############
@@ -237,12 +244,12 @@ tmin <- c(loc1$gmt - 1.25*3600,force_tz(as.POSIXct(last(loc1$gmt) + 1.25*3600,tz
 z <- seq(length(tmin)-1) ## Have to redefine z for divestats
 #z <- z[1:(length(z)-1)]
 divestats$start <- force_tz(divestats$start, tzone = "GMT", roll = FALSE)
-z <- cut(divestats$start,breaks = tmin, labels = TRUE)
+z <- cut(divestats$start,breaks = tmin, labels = z)
 # divestats <- divestats %>% 
 #   mutate("X" = as.integer(shift(z,-1))) %>% 
 #   left_join(loc1 %>% select(X,lon,lat),by = "X")
 divestats <- divestats %>% 
-  mutate("X" = as.integer(z,-1)) %>% 
+  mutate("X" = as.integer(z)) %>% 
   left_join(loc1 %>% select(X,lon,lat),by = "X")
 divestats[is.na(divestats)] <- 0
 
@@ -252,9 +259,9 @@ divestats <- divestats %>% filter(lat !=0)
 ## Set up dataframes  to add columns lat, lon. num is the indexer to join lat lon from divestats with that of bsm_seg_df
 loc1$gmt <- force_tz(loc1$gmt, tzone = "GMT", roll = FALSE)
 loc1$X = seq(1:length(loc1$X))
-tmin <- loc1$gmt - 1.25*3600 
-z <- seq(length(tmin)) ## Have to redefine z for divestats
-z <- z[1:(length(z)-1)]
+tmin <- c(loc1$gmt - 1.25*3600,force_tz(as.POSIXct(last(loc1$gmt) + 1.25*3600,tz='GMT'), tzone = "GMT", roll = FALSE))
+z <- seq(length(tmin)-1) ## Have to redefine z for divestats
+#z <- z[1:(length(z)-1)]
 bsm_seg_df$start <- ISOdatetime(1970, 1, 1, 0, 0, 0, tz = "GMT") + bsm_seg_df$time_start
 bsm_seg_df$start <- force_tz(bsm_seg_df$start, tzone = "GMT", roll = FALSE)
 z <- cut(bsm_seg_df$start,breaks = tmin, labels = z)
@@ -274,16 +281,19 @@ source("Mydielprep.R") # NOAA notes that for latitudes less than +/- 72 degrees 
 
 
 loc1 <- diel.loc(loc1)
-divestats <- diel.divestats(divestats)
-bsm_seg_df <- diel.bsm(bsm_seg_df)
+dives <- divestats %>% filter(start > first(loc1$gmt) & start < last(loc1$gmt))
+dives <- diel.divestats(dives)
+bsm <- bsm_seg_df %>% filter(start > first(loc1$gmt) & start < last(loc1$gmt))
+bsm <- diel.bsm(bsm)
 
 #########################################################################################################
 
 ## filtered dive summaries that may have foraging
-filtered_divestats <-  divestats %>% filter(max.d > 4, all.dur>60)
+filtered_divestats <-  dives %>% filter(max.d > 4, all.dur>60)
 ## Adding whether dive is a hunting dive or not according to ht_rat (ratio of hunting time to dive time)
+# prportion of dive spent in vARS mode (Arthur et al. 2016)
 filtered_divestats$ht_rat <- filtered_divestats$hunting_time/filtered_divestats$all.dur  #hunting to transit ratio
-divestats$ht_rat <- divestats$hunting_time/divestats$all.dur
+dives$ht_rat <- dives$hunting_time/dives$all.dur
 
 h <- 0.25 #threshold for "ht_rat' above which seal is hunting in the dive (Spends > 25% of the dive hunting) 
 # p = % of dives where hunting time is considerably large enough that the dive can be seen as a foraging dive
@@ -291,12 +301,12 @@ p <- length(filtered_divestats$ht_rat[filtered_divestats$ht_rat>h])/length(filte
 # p should be around 80%
 
 #### Adding "hunt_dive" column to divestats and filtered_divestats
-divestats <- filtered_divestats %>% 
+dives <- filtered_divestats %>% 
   filter(hunting_time>10) %>% 
   filter(hunting_time>30 | max.d>40 |ht_rat > h) %>% 
   mutate("hunt_dive" = "hunting") %>%
   select(num,hunt_dive) %>% 
-  right_join(divestats,by="num") %>% 
+  right_join(dives,by="num") %>% 
   replace_na(list(hunt_dive = "transit"))
 
 filtered_divestats <- filtered_divestats %>% 
@@ -362,14 +372,32 @@ loc1[is.na(loc1)] <- 0
 # Where has hunting time been calculated (for dives >4m & >15sec), but dives close to location are >4m and 60sec
 # which(is.na(loc1$dur) & loc1$hunting_time!=0)
 
+# loc distances from Marion -----------------------------------------------
 
+sf_divestats = st_as_sf(dives,coords = c("lon", "lat"),crs=4326,remove = FALSE)
+
+sf_Marion <- data.frame("lon" = 37.746368, "lat" = -46.893361) %>% 
+  st_as_sf(coords = c("lon", "lat"),crs=4326,remove = FALSE)
+distances = st_distance(sf_divestats,sf_Marion)
+dives <- dives %>% 
+  mutate('distances [m]' = array(distances))
 
 ##############################################################################
-## Map the distribution of behaviours
+## Map the distribution of multiple seals behaviours
+# ggplot() + 
+#   geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc1) +
+#   geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc) +
+#   geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='red', data = sf_Marion) +
+#   geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc1$heffort)+1, color='red', data = loc1[loc1$'b.5'==2,]) +
+#   geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc$heffort)+1, color='red', data = loc[loc$'b.5'==2,]) +
+#   ggtitle(paste('Seal',sealID,sep = " "))
+
+## Map the distribution of a single seals behaviours
 ggplot() + 
-  geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc1)
-
-
+  geom_point(aes(x = lon , y = lat, color = hunting_time, size = for_effort), pch = 19,data = loc1) +
+  geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='green', data = sf_Marion) +
+  geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc1$heffort)+1, color='red', data = loc1[loc1$'b.5'==2,]) +
+  ggtitle(paste('Seal',sealID,sep = " "))
 
 
 # Saving rest of files ----------------------------------------------------
@@ -378,13 +406,16 @@ ggplot() +
 ############################################## Saving files as rds ######################################
 #########################################################################################################
 
-saveRDS(bsm_seg_df,file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")),compress = TRUE)
+#saveRDS(bsm_seg_df,file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")),compress = TRUE)
+saveRDS(bsm,file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")),compress = TRUE)
 saveRDS(df_init_tmp2,file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.rds",sep = "")),compress = TRUE)
-saveRDS(divestats,file.path(save_divestats,paste(sealID,"_divestats.rds",sep = "")),compress = TRUE)
+#saveRDS(divestats,file.path(save_divestats,paste(sealID,"_divestats.rds",sep = "")),compress = TRUE)
+saveRDS(dives,file.path(save_divestats,paste(sealID,"_divestats.rds",sep = "")),compress = TRUE)
 saveRDS(filtered_divestats,file.path(save_filtered_divestats,paste(sealID,"_filtered_divestats.rds",sep = "")),compress = TRUE)
 saveRDS(loc1,file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")),compress = TRUE)
 
 
 
 
-filtered_divestats <- read_rds(file.path(save_filtered_divestats,paste(1,"_filtered_divestats.rds",sep = "")))
+#filtered_divestats <- read_rds(file.path(save_filtered_divestats,paste(1,"_filtered_divestats.rds",sep = "")))
+
