@@ -64,7 +64,6 @@ save_dbs = "dbs"
 save_ndbs = "ndbs"
 save_divessummary = paste("Plots & Dive Tables/Seal",sealID, sep = "")
 
-
 bsm_seg_df <- read_rds(file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")))
 df_init_tmp2 <- read_rds(file.path(save_df_init_tmp2,paste(sealID,"_df_init_tmp2.rds",sep = "")))
 divestats <- read_rds(file.path(save_divestats,paste(sealID,"_divestats.rds",sep = "")))
@@ -72,7 +71,7 @@ divestats <- read_rds(file.path(save_divestats,paste(sealID,"_divestats.rds",sep
 loc1 <- read_rds(file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")))
 
 
-divessummary <- read_csv(file.path(save_divessummary,"divessummary.csv"))
+divessummary <- read.csv(file.path(save_divessummary,"divessummary.csv"),sep = ',')
 Fts_summaries <- read.csv('Fts_summaries.csv',sep = ';')
 
 filtered_divestats = divessummary %>% filter(max.d >4, all.dur>60)
@@ -380,6 +379,13 @@ anova(ht_rat.null,ht_rat.model)
 
 
 # Lets try something a bit less ambitious
+
+##############################
+### vARS ~ hARS ###
+##############################
+hist(filtered_divestats$ht_rat*100)
+ht_rat.null = lmer(ht_rat ~ diel_phase + (1|ft) + (1|bout), data=filtered_divestats, REML = FALSE, family='poisson') #+ hour + JDay
+
 
 ##############################
 ### ht_rat ~ mean_Temp ###
