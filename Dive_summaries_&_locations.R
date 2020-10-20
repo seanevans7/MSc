@@ -43,7 +43,7 @@ library(rgl)
 library(lme4)
 
 rm(list = ls())
-sealID <- 15# Used for saving file 
+sealID <- 19# Used for saving file 
 save_bsm_seg_df = "bsm_seg_df"
 save_df_init_tmp2 = "df_init_tmp2"
 save_divestats = "divestats"
@@ -218,15 +218,15 @@ divestats <- bsm_seg_df %>%
   right_join(df_init_tmp2 %>% 
                filter(row_number()==1) %>% 
                select(-Time,-Depth,-Temperature,-Light.Level) %>% 
-               mutate("start" = as.POSIXct(strptime(gmt,format = "%Y-%m-%d %H:%M", tz = "GMT"))) %>% 
+               mutate("start" = as.POSIXct(strptime(gmt,format = "%Y-%m-%d %H:%M:%S", tz = "GMT"))) %>% 
                select(-gmt,-cor.depth)
              ,by = "num") %>% 
   mutate(hunting_time = replace_na(hunting_time, 0), transit_time = ifelse(is.na(transit_time),all.dur,transit_time)) %>% 
   full_join(tibble(df_init_tmp2 %>% 
-                     filter(max.d > 4, all.dur > 20) %>% 
+                     filter(max.d > 4, all.dur > 60) %>% 
                      select(num) %>% 
                      unique(),
-                   "pdsi" = (((df_init_tmp2 %>% filter(max.d > 4, all.dur > 20) %>% slice(1))$Time)[-1] - ((df_init_tmp2 %>% filter(max.d > 4, all.dur > 20) %>% slice(n()))$Time))))
+                   "pdsi" = (((df_init_tmp2 %>% filter(max.d > 4, all.dur > 60) %>% slice(1))$Time)[-1] - ((df_init_tmp2 %>% filter(max.d > 4, all.dur > 60) %>% slice(n()))$Time))))
 
 
 divestats$end <- ISOdatetime(1970, 1, 1, 0, 0, 0, tz = "GMT") + (df_init_tmp2 %>% slice(n()))$Time
@@ -383,21 +383,19 @@ dives <- dives %>%
   mutate('distances [m]' = array(distances))
 
 ##############################################################################
-## Map the distribution of multiple seals behaviours
-# ggplot() + 
-#   geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc1) +
-#   geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc) +
-#   geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='red', data = sf_Marion) +
-#   geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc1$heffort)+1, color='red', data = loc1[loc1$'b.5'==2,]) +
-#   geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc$heffort)+1, color='red', data = loc[loc$'b.5'==2,]) +
-#   ggtitle(paste('Seal',sealID,sep = " "))
-
-## Map the distribution of a single seals behaviours
-ggplot() + 
-  geom_point(aes(x = lon , y = lat, color = hunting_time, size = for_effort), pch = 19,data = loc1) +
-  geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='green', data = sf_Marion) +
+# Map the distribution of multiple seals behaviours
+ggplot() +
+  geom_point(aes(x = lon , y = lat, color = hunting_time, size = heffort), pch = 19,data = loc1) +
+  geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='red', data = sf_Marion) +
   geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc1$heffort)+1, color='red', data = loc1[loc1$'b.5'==2,]) +
   ggtitle(paste('Seal',sealID,sep = " "))
+
+## Map the distribution of a single seals behaviours
+# ggplot() + 
+#   geom_point(aes(x = lon , y = lat, color = hunting_time, size = for_effort), pch = 19,data = loc1) +
+#   geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='green', data = sf_Marion) +
+#   geom_point(aes(x = lon , y = lat),pch = 1,size=max(loc1$heffort)+1, color='red', data = loc1[loc1$'b.5'==2,]) +
+#   ggtitle(paste('Seal',sealID,sep = " "))
 
 
 # Saving rest of files ----------------------------------------------------

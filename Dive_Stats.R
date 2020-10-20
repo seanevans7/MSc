@@ -51,7 +51,7 @@ rm(list = ls())
 # Which seal?
 #sealtag <- "A146" # used for accessing and loading file 
 # (If error = "invalid description argument" then check that seal doesn't have two files associated with it)
-sealID <- 25 # Used for saving file 
+sealID <- 36 # Used for saving file 
 
 
 
@@ -802,3 +802,12 @@ system.time({
     loc1$dive_efficiency[i] <- mvar$dive_efficiency %>% mean(na.rm=T)
   }
 })
+
+
+
+
+
+
+
+
+
