@@ -54,19 +54,27 @@ SealIDS = c(1,2,4,5,seq(13,25,1),31,47,seq(49,53,1),57,58,seq(62,70,1),109,110,1
 #SealIDS = c(68,69,110,111,112,113)
 
 Fts_summaries <- read.csv('Fts_summaries.csv',sep = ';')
+source("Add_Mdepth_hunting.R")
 
 for (i in 1:length(SealIDS)) {
   
   sealID = SealIDS[i]
+  print(sealID)
+  
   save_divessummary = paste("Plots & Dive Tables/Seal",sealID, sep = "")
   divessummary <- read.csv(file.path(save_divessummary,"divessummary.csv"),sep=',')
   save_loc1 = "loc1"
   loc1 <- read_rds(file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")))
+  save_bsm_seg_df = "bsm_seg_df"
+  bsm_seg_df <- read_rds(file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")))
   
   
   save_all_dives = "all_dives"
   all_dives <- read_rds(file.path(save_all_dives,paste(sealID,"_all_dives.rds",sep = "")))
   
+  #############################################################################
+  # Correcting start column -----------------------------------------------------
+  #############################################################################
   divessummary <- (divessummary %>% dplyr::select(-start) %>% right_join(all_dives %>% 
                                                                      filter(row_number()==1) %>% 
                                                                      mutate("start" = as.POSIXct(strptime(gmt,format = "%Y-%m-%d %H:%M:%S", tz = "GMT"))) %>% 
@@ -89,6 +97,9 @@ for (i in 1:length(SealIDS)) {
   divessummary$dusk = force_tz(as.POSIXct(ymd_hms(divessummary$dusk)), tzone = "Africa/Addis_Ababa", roll = FALSE)  + 3*3600
   
   #############
+  divessummary <- Add_Mdepth_hunting(divessummary,bsm_seg_df)
+  
+  #############
   Fts_summaries_init = Fts_summaries %>% filter(id == sealID) %>% dplyr::select(ft.start,ft.end,meandir,sddirDEG,ani_n)
   
   # Fts_summaries_init$ft_ht <- NA # sum of hunting time for all dives within this foraging trip
@@ -108,19 +119,20 @@ for (i in 1:length(SealIDS)) {
   ### Add ft to divessummary ###
   ##############################
   
-  divessummary$ft <- NA # Adding ft column to divestats for later stats
+  divessummary$ft_all <- NA # Adding ft column to divestats for later stats
   ##run a loop over the divessummary data, grabbing the corresponding foraging trip id
   system.time({
     for(j in 1: (nrow(Fts_summaries_init))) {
-      print(paste(j,nrow(Fts_summaries_init)-1),sep=" ")
-      tmin <- as.POSIXct(Fts_summaries_init$'ft.start'[j])
-      tmax <- as.POSIXct(Fts_summaries_init$'ft.end'[j])+24*3600
-      divessummary$ft[divessummary$start>=tmin & divessummary$start<=tmax] = j
+      # print(paste(j,nrow(Fts_summaries_init)-1),sep=" ")
+      tmin <- as.POSIXct(Fts_summaries_init$'ft.start'[j], tz = 'GMT')
+      tmax <- as.POSIXct(Fts_summaries_init$'ft.end'[j], tz = 'GMT')+24*3600
+      divessummary$ft_all[divessummary$start>=tmin & divessummary$start<=tmax] = j
     }
   })
-  # Add column for bouts
+
+  # Add column for bouts - differentiated by 6 hours for all dives
   time_diff <- difftime(divessummary$start, lag(divessummary$start, default = divessummary$start[1]), units = "sec")
-  divessummary$bout <- cumsum(ifelse(time_diff<3600*6,0,1))
+  divessummary$bout_no <- cumsum(ifelse(time_diff<3600*6,0,1))
   
   #######################################################
   ### Add max_diff_Therm & hunt_diff_Therm ###
@@ -153,12 +165,37 @@ for (i in 1:length(SealIDS)) {
     left_join(loc1 %>% select(X,b.5),by = "X")
   colnames(divessummary)[which(names(divessummary) == "b.5")] <- "hARS_mode"
   
+  ##############################
+  ### filtered_divestats ###
+  ##############################
+  
+  filtered_divestats <- divessummary %>% filter(max.d >4, all.dur>60)
+  
+  # Add column for bouts - differentiated by 6 hours for filtered dives
+  time_diff <- difftime(filtered_divestats$start, lag(filtered_divestats$start, default = filtered_divestats$start[1]), units = "sec")
+  filtered_divestats$bout <- cumsum(ifelse(time_diff<3600*6,0,1))
+  
+  ##############################
+  ### Add ft to divessummary ###
+  ##############################
+  
+  filtered_divestats$ft <- NA # Adding ft column to divestats for later stats
+  ##run a loop over the divessummary data, grabbing the corresponding foraging trip id
+  system.time({
+    for(j in 1: (nrow(Fts_summaries_init))) {
+      # print(paste(j,nrow(Fts_summaries_init)-1),sep=" ")
+      tmin <- as.POSIXct(Fts_summaries_init$'ft.start'[j], tz = 'GMT')
+      tmax <- as.POSIXct(Fts_summaries_init$'ft.end'[j], tz = 'GMT')+24*3600
+      filtered_divestats$ft[filtered_divestats$start>=tmin & filtered_divestats$start<=tmax] = j
+    }
+  })
+  
   ############################
   ### saveRDS divessummary ###
   ############################
   
-  col_list = c('sealID','ft','bout','start','lon','lat','diel_phase','JDay','all.dur','distances..m.','mean_Temp','deltaT','dive_efficiency','ht_rat','hARS_mode','max.d','Mdepth_hunting','Thermocline','hunt_diff_Therm','max_diff_Therm','X','Nt')
-  filtered_divestats <- divessummary %>% filter(max.d >4, all.dur>60)
+  col_list = c('sealID','ft','bout','start','lon','lat','diel_phase','JDay','all.dur','distances..m.','mean_Temp','deltaT','dive_efficiency','ht_rat','hARS_mode','max.d','Mdepth_hunting','Thermocline','hunt_diff_Therm','max_diff_Therm','X','Nt','pdsi','bottom_time')
+  
   filtered_divestats <- filtered_divestats %>% dplyr::select(col_list)
   saveRDS(filtered_divestats,file.path(save_divessummary,paste(sealID,"_filtered_divestats.rds",sep = "")),compress = TRUE)
   
@@ -179,9 +216,9 @@ for (i in 1:length(SealIDS)) {
   
   system.time({
     for(j in 1:nrow(Fts_summaries_init)) {
-      print(paste(j,nrow(Fts_summaries_init)-1),sep=" ")
-      tmin <- as.POSIXct(Fts_summaries_init$'ft.start'[j])
-      tmax <- as.POSIXct(Fts_summaries_init$'ft.end'[j])
+      # print(paste(j,nrow(Fts_summaries_init)-1),sep=" ")
+      tmin <- as.POSIXct(Fts_summaries_init$'ft.start'[j], tz = 'GMT')
+      tmax <- as.POSIXct(Fts_summaries_init$'ft.end'[j], tz = 'GMT')
       meandir = Fts_summaries_init$meandir
       sddirDEG = Fts_summaries_init$sddirDEG
       ani_n = Fts_summaries_init$ani_n
@@ -208,7 +245,7 @@ for (i in 1:length(SealIDS)) {
   ##2.5 hr interval between locations, therefore chose start of dives that fell into 1.25 hrs either side of each location
   system.time({
     for(j in 1: (nrow(loc1))) {
-      print(paste(j,nrow(loc1)-1),sep=" ")
+      # print(paste(j,nrow(loc1)-1),sep=" ")
       tmin <- loc1$gmt[j] - (3600*1.25)
       tmax <- loc1$gmt[j] + (3600*1.25)
       mvar <- filtered_divestats[filtered_divestats$start >= tmin & filtered_divestats$start <= tmax,]
@@ -234,7 +271,7 @@ for (i in 1:length(SealIDS)) {
   ##2.5 hr interval between locations, therefore chose start of dives that fell into 1.25 hrs either side of each location
   system.time({
     for(j in 1: (nrow(loc1))) {
-      print(paste(j,nrow(loc1)-1),sep=" ")
+      # print(paste(j,nrow(loc1)-1),sep=" ")
       tmin <- loc1$gmt[j] - (3600*1.25)
       tmax <- loc1$gmt[j] + (3600*1.25)
       mvar <- filtered_divestats[filtered_divestats$start >= tmin & filtered_divestats$start <= tmax,]
@@ -253,7 +290,7 @@ for (i in 1:length(SealIDS)) {
   ##############################
   ### saveRDS loc1 ###
   ##############################
-  col_list = c('id','for_effort','mean_max.d' ,'dive_efficiency','deltaT','strat_prop', 'hunting_time','mean_Temp','all.dur','lon','lat','diel_phase','no_dives','JDay')
+  col_list = c('id','ft','meandir','for_effort','mean_max.d' ,'dive_efficiency','deltaT','strat_prop', 'hunting_time','mean_Temp','all.dur','lon','lat','diel_phase','no_dives','JDay')
   loc1 <- loc1 %>% dplyr::select(col_list)
   saveRDS(loc1,file.path(save_divessummary,paste(sealID,"_loc.rds",sep = "")),compress = TRUE)
   
