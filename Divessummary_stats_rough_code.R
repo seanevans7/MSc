@@ -70,7 +70,7 @@ rm(list = ls())
 
 Fts_summaries <- read.csv('Fts_summaries.csv',sep = ';')
 
-sealID = 113
+sealID = 1
 
 
 
@@ -356,7 +356,7 @@ new_divestats <- read_rds(file.path(save_new_divestats,paste(sealID,"_new_divest
 
 #Adding local_times for seal 36
 
-source("Mydielprep.R")
+source("Mydielprep_fun.R")
 
 dives <- divestats %>% filter(start > first(loc1$gmt) & start < last(loc1$gmt))
 dives <- diel.divestats(dives)

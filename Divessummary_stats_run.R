@@ -54,7 +54,7 @@ SealIDS = c(1,2,4,5,seq(13,25,1),31,47,seq(49,53,1),57,58,seq(62,70,1),109,110,1
 #SealIDS = c(68,69,110,111,112,113)
 
 Fts_summaries <- read.csv('Fts_summaries.csv',sep = ';')
-source("Add_Mdepth_hunting.R")
+source("Add_Mdepth_hunting_fun.R")
 
 for (i in 1:length(SealIDS)) {
   
@@ -140,12 +140,12 @@ for (i in 1:length(SealIDS)) {
   
   divessummary <- divessummary %>%
     mutate(therm_depth = ifelse(Therm_dep>0 & Tmld>0 & abs(Therm_dep-Tmld)<=10, (Therm_dep+Tmld)/2,
-                                ifelse(Therm_dep > 0 & is.na(Tmld), Therm_dep,
+                                ifelse(Therm_dep > 0 & is.na(Tmld), NA, # was Therm_dep before NA
                                        ifelse(Tmld > 0 & is.na(Therm_dep), Tmld,
                                               ifelse(Therm_dep>0 & Tmld>0 & abs(Therm_dep-Tmld)>10, Therm_dep,NA)))),
-           diff_therm = ifelse(Therm_dep > 0 & Tmld >0, (Therm_dep-Tmld),NA),
+           diff_therm = ifelse(Therm_dep > 0 & Tmld >0, (Therm_dep-Tmld),NA), #error estimate
            hunt_diff_Therm = Mdepth_hunting-therm_depth,
-           max_diff_Therm = therm_depth-max.d)
+           max_diff_Therm = max.d-therm_depth)
   
   #####################
   ### Add hARS_mode ###
@@ -260,7 +260,7 @@ for (i in 1:length(SealIDS)) {
   })
   
   ##############################
-  ### Add strat_prop to loc1 ###
+  ### Add means to loc1 ###
   ##############################
   
   loc1$mean_Temp <- NA
@@ -282,7 +282,7 @@ for (i in 1:length(SealIDS)) {
   })
   
   ##############################
-  ### Add strat_prop to loc1 ###
+  ### Add for_effort to loc1 ###
   ##############################
   
   loc1$for_effort = loc1$ht_rat*loc1$no_dives

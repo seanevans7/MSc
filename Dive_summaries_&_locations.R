@@ -277,7 +277,7 @@ bsm_seg_df <- bsm_seg_df %>%
 ############################################## Local time  ##############################################
 #########################################################################################################
 ## Change time to local time using location columns
-source("Mydielprep.R") # NOAA notes that for latitudes less than +/- 72 degrees accuracy is approximately one minute
+source("Mydielprep_fun.R") # NOAA notes that for latitudes less than +/- 72 degrees accuracy is approximately one minute
 
 
 loc1 <- diel.loc(loc1)
