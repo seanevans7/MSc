@@ -10,25 +10,80 @@
 
 # This function returns the names of the variables to keep for your model. These are the most informative variables.
 #Getting Environmental Variables for occupancy
-library(raster)
+# Load packages -----------------------------------------------------------
+# May have to re-install some packages after updating R, because the latest version of Rtools might not be downloaded.
+# installr::install.Rtools()
+# remotes::install_cran("dplyr", force = TRUE)
+library(remotes)
+library(purrr)
+library(move)
+# library(moveVis)
+library(argosfilter)
 library(sf)
+library(maps)
+library(mapdata)
+library(fields)
+library(lattice)
+library(effects)
+library(trip)
+library(Matrix)
+library(diveMove)
+library(pbapply)
+library(wrapr)
+library(stringr)
+library(lubridate)
+library(microbenchmark)
+library(data.table)
+library(ggplot2)
+library(ncdf4)
+library(raster)
+library(magrittr)
+library(rgl)
+library(lme4)
+library(nlme)
+library(lmerTest)
+library(dummies)
+
+#library(plyr)
+theme_set(theme_bw(base_size = 16))
+library(tidyverse)  # data manipulation
+library(dplyr)
+library(broom)
+library(factoextra) # clustering algorithms & visualization
+library(cluster)    # clustering algorithms
+library(ggstatsplot)
+
+# PCA and correlations using FactoMineR ----------------------------------------------------
+library("FactoMineR")
+library("corrplot")
+library('corrr')
+library('ggraph')
+
+# Or use car::vif()
 
 # Read in data.frame of variables-------------
-#Convert to data frame for vif ---
-ras <- as.data.frame(r, na.rm = TRUE)
-head(ras)
+new_my_data <- dives[dives$pdsi<900,] %>% na.omit()
 
+summary(new_my_data)
+
+# summer & winter
+winter_dives <- new_my_data[new_my_data$season=='winter',]
+summer_dives <- new_my_data[new_my_data$season=='summer',]
 #Center and scale data
-df <- as.data.frame(base::scale(ras, center = TRUE, scale = TRUE))
+df <- as.data.frame(base::scale(summer_dives[,c('all.dur','dive_efficiency','ht_rat'
+                                               ,'hARS_mode','max.d','pdsi','bottom_time',
+                                               'dive_res','hunting_time','X.bt.dt')], center = TRUE, scale = TRUE))
+
+
 names(df)
 # df$geomorphology <- as.factor(ras$geomorphology) #Add after scaling and centering because = factor
 summary(df)
 
 # install.packages("fmsb")
 library("fmsb")
-
+threshold = 10 # 5 (more conservative, but widely used) or 10 (>10 is mostly used)
 #VIF Function ----
-vif_func<-function(df,thresh=10){
+vif_func<-function(df,thresh=threshold){
   #get initial vif value for all comparisons of variables
   vif_init<-NULL
   var_names <- names(df)
@@ -79,6 +134,6 @@ vif_summer
 # [19] "vmix"                 "vmix_sd"
 
 names(df)[!(names(df) %in% vif_summer)]
-rm(rastlist,ras,r,df)
+rm(df)
 
 

@@ -466,8 +466,6 @@ ggplot(dives, aes(x=diel_phase, y=dive_res, fill=diel_phase))+
   guides(fill=F)
 
 ###### Hunting
-# % of dives without hunting
-dives %>% filter(ht_rat==0) %>% NROW()/dives %>% NROW()*100
 
 # max.d to hunting depth
 plot(dives$max.d[!is.na(dives$Mdepth_hunting)],dives$Mdepth_hunting[!is.na(dives$Mdepth_hunting)])
@@ -683,3 +681,10 @@ ggplot(dives,aes(bottom_time,fill = divetype))+geom_boxplot()
 
 # count of thermocline presence in divetype by cluster analysis
 dives %>% group_by(divetype,Thermocline) %>% count()
+
+
+
+# ht_rat differences in dives ---------------------------------------------
+# % of dives without hunting
+dives %>% filter(ht_rat==0) %>% NROW()/dives %>% NROW()*100
+

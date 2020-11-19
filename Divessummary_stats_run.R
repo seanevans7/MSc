@@ -11,7 +11,7 @@ To do list:
   Check therm_depth_diff is correct i.e. There shouldn't be negative values?'
 
 # Load packages -----------------------------------------------------------
-
+ 
 library(purrr)
 library(broom)
 library(move)
@@ -194,7 +194,7 @@ for (i in 1:length(SealIDS)) {
   ### saveRDS divessummary ###
   ############################
   
-  col_list = c('sealID','ft','bout','start','lon','lat','diel_phase','JDay','all.dur','distances..m.','mean_Temp','deltaT','dive_efficiency','ht_rat','hARS_mode','max.d','Mdepth_hunting','Thermocline','hunt_diff_Therm','max_diff_Therm','X','Nt','pdsi','bottom_time')
+  col_list = c('sealID','ft','bout','start','lon','lat','diel_phase','JDay','all.dur','distances..m.','mean_Temp','deltaT','dive_efficiency','ht_rat','hARS_mode','max.d','Mdepth_hunting','Thermocline','hunt_diff_Therm','max_diff_Therm','X','Nt','pdsi','bottom_time','hunting_time','X.bt.dt')
   
   filtered_divestats <- filtered_divestats %>% dplyr::select(col_list)
   saveRDS(filtered_divestats,file.path(save_divessummary,paste(sealID,"_filtered_divestats.rds",sep = "")),compress = TRUE)
@@ -251,7 +251,7 @@ for (i in 1:length(SealIDS)) {
       mvar <- filtered_divestats[filtered_divestats$start >= tmin & filtered_divestats$start <= tmax,]
       if (NROW(mvar %>% filter(Thermocline=='present'))>0) {
         new_df <- mvar %>% filter(Thermocline=='present')
-        loc1$strat_prop[j] <- NROW(new_df)
+        loc1$strat_prop[j] <- NROW(new_df)/NROW(mvar)
       }
       else {
         loc1$strat_prop[j] <- 0
