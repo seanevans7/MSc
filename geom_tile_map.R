@@ -42,7 +42,7 @@ nc_close(frnts)
 frnts <- rbind(STF,SAF,PF)
 
 frnts <- na.omit(frnts)
-frnts2 <- droplevels(subset(frnts,frnts$lon >= 25 & frnts$lon <= 55))
+frnts2 <- droplevels(subset(frnts,frnts$lon >= 20 & frnts$lon <= 55))
 rm(PF,SAF,STF,frnts)
 
 # Antarctica base map of just Weddell Sea
@@ -55,25 +55,74 @@ ant <- crop(wrld_simpl, extent(-35, 35, -90, -45))
 sf_Marion <- data.frame("lon" = 37.746368, "lat" = -46.893361) %>% 
   st_as_sf(coords = c("lon", "lat"),crs=4326,remove = FALSE)
 
+
+############ Summer ###########
+####### locs ########
+
 ggplot() +
   # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
   # coord_map("azequidistant", orientation = c(-90, 0, 0)) +
-  geom_tile(data = dives_sr, aes(lon, lat, z = ht_rat),binwidth = 0.25, stat = "summary_2d", fun = mean,na.rm = TRUE)+
-  geom_point(data = frnts2 %>% filter(name=='STF' | name=='PF'), aes(x = lon, y = lat),size=1, colour = "grey60")+ #, linetype = 1
-  geom_point(aes(x = lon , y = lat),pch = 17,size=2, color='red', data = sf_Marion)+
+  geom_tile(data = locs[locs$season=='summer' & locs$strat_prop>0,], aes(lon, lat, z = strat_prop),binwidth = 0.1, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_point(data = frnts2 %>% filter(name=='PF' | name=='SAF'), aes(x = lon, y = lat),size=0.5, colour = "grey60")+ #, linetype = 1, name=='STF' | 
+  geom_point(aes(x = lon , y = lat),pch = 17,size=2.5, color='red', data = sf_Marion)+
   theme_bw()   +
-  facet_grid(diel_phase~season)+
-  scale_x_continuous(breaks = NULL) +
+  #facet_grid(diel_phase~season)+
+  scale_x_continuous(name="lon", limits=c(30, 50)) + #summer - name="lon", limits=c(30, 50)
+  scale_y_continuous(name="lat", limits=c(-55, -40)) + #summer - name="lat", limits=c(-55, -40)
+  xlab("") + 
+  ylab("")  +
+  # labs(fill = "Mean diving \nduration (min)")+
+  scale_fill_viridis_b()+
+  ggtitle('Thermocline presence')
+
+####### Dives ######
+
+ggplot() +
+  # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
+  # coord_map("azequidistant", orientation = c(-90, 0, 0)) +
+  geom_tile(data = summer_dives, aes(lon, lat, z = divetype),binwidth = 0.1, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_point(data = frnts2 %>% filter(name=='PF' | name=='SAF'), aes(x = lon, y = lat),size=0.5, colour = "grey60")+ #, linetype = 1, name=='STF' | 
+  geom_point(aes(x = lon , y = lat),pch = 17,size=2.5, color='red', data = sf_Marion)+
+  theme_bw()   +
+  #facet_grid(diel_phase~season)+
+  scale_x_continuous(name="lon", limits=c(30, 50)) +
+  scale_y_continuous(name="lat", limits=c(-55, -40)) +
+  xlab("") + 
+  ylab("")  +
+  # labs(fill = "Mean diving \nduration (min)")+
+  scale_fill_viridis_b()+
+  ggtitle('mean_Temp')
+
+ggplot() +
+  # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
+  # coord_map("azequidistant", orientation = c(-90, 0, 0)) +
+  geom_tile(data = summer_dives[summer_dives$Thermocline=='absent',], aes(lon, lat, z = ht_rat),binwidth = 0.1, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_point(data = frnts2 %>% filter(name=='PF' | name=='SAF'), aes(x = lon, y = lat),size=0.5, colour = "grey60")+ #, linetype = 1, name=='STF' | 
+  geom_point(aes(x = lon , y = lat),pch = 17,size=2.5, color='red', data = sf_Marion)+
+  theme_bw()   +
+  #facet_grid(diel_phase~season)+
+  scale_x_continuous(name="lon", limits=c(30, 50)) +
+  scale_y_continuous(name="lat", limits=c(-55, -40)) +
   xlab("") + 
   ylab("")  +
   # labs(fill = "Mean diving \nduration (min)")+
   scale_fill_viridis_b()+
   ggtitle('ht_rat')
 
+######## Looking at dives West and East of the Island in summer
+dives[dives$season=='summer' & dives$lon>37.746368 & !is.na(dives$therm_depth),]$therm_depth %>% summary() 
+dives[dives$season=='summer' & dives$lon>37.746368 & !is.na(dives$therm_depth),]$therm_depth %>% sd()
+summer_dives[summer_dives$lon<37.746368,]$max.d %>% mean()
+dives[dives$season=='summer' & dives$lon<37.746368 & is.na(dives$therm_depth),]$max.d %>% summary() 
+dives[dives$season=='summer' & dives$lon<37.746368 & is.na(dives$therm_depth),]$max.d %>% sd()
+
+dives[dives$season=='summer' & dives$lon>37.746368 & is.na(dives$therm_depth),]$max.d %>% summary() 
+dives[dives$season=='summer' & dives$lon>37.746368 & is.na(dives$therm_depth),]$max.d %>% sd()
+
 # Adds labels
-# # geom_text(aes(x = -40, y = seq(-75, -55, by = 10), hjust = -0.2,
-#               label = rev(paste0(seq(55, 75, by = 10), "°S")))) +
-# # geom_text(aes(x = x_lines, y = -42, label = c("35°W","15°W", "0°", "15°E","35°E"))) +
+  # geom_text(aes(x = 30, y = seq(-52, -42.5, by = 2), hjust = -0.2,
+              # label = rev(paste0(seq(42.5, 52, by = 2), "°S")))) #+
+  # geom_text(aes(x = x_lines, y = -42, label = c("35°W","15°W", "0°", "15°E","35°E"))) #+
 # # Adds Y axes
 # # geom_segment(aes(y = y_lines, yend = y_lines, x = -35, xend = 35),
 #              linetype = "dashed", colour = "lightgrey") +
@@ -87,5 +136,46 @@ ggplot() +
 #       legend.text = element_text(size=10),
 #       legend.position = c(.1,.25)))
 # 
+
+############ Winter ###########
+
+####### locs ########
+
+ggplot() +
+  # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
+  # coord_map("azequidistant", orientation = c(-90, 0, 0)) +
+  geom_tile(data = locs[locs$season=='winter' & locs$strat_prop>0,], aes(lon, lat, z = strat_prop),binwidth = 0.1, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_point(data = frnts2 %>% filter(name=='PF' | name=='SAF'), aes(x = lon, y = lat),size=0.5, colour = "grey60")+ #, linetype = 1, name=='STF' | 
+  geom_point(aes(x = lon , y = lat),pch = 17,size=2.5, color='red', data = sf_Marion)+
+  theme_bw()   +
+  #facet_grid(diel_phase~season)+
+  scale_x_continuous(name="lon", limits=c(20, 50)) + #summer - name="lon", limits=c(30, 50)
+  scale_y_continuous(name="lat", limits=c(-52, -40)) + #summer - name="lat", limits=c(-55, -40)
+  xlab("") + 
+  ylab("")  +
+  # labs(fill = "Mean diving \nduration (min)")+
+  scale_fill_viridis_b()+
+  ggtitle('Thermocline presence')
+
+####### winter dives ########
+ggplot() +
+  # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
+  # coord_map("azequidistant", orientation = c(-90, 0, 0)) +
+  geom_tile(data = winter_dives, aes(lon, lat, z = mean_Temp),binwidth = 0.1, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_point(data = frnts2 %>% filter(name=='PF' | name=='SAF'), aes(x = lon, y = lat),size=0.5, colour = "grey60")+ #, linetype = 1, name=='STF' | 
+  geom_point(aes(x = lon , y = lat),pch = 17,size=2.5, color='red', data = sf_Marion)+
+  theme_bw()   +
+  #facet_grid(diel_phase~season)+
+  scale_x_continuous(name="lon", limits=c(20, 50)) + #summer - name="lon", limits=c(30, 50)
+  scale_y_continuous(name="lat", limits=c(-52, -40)) + #summer - name="lat", limits=c(-55, -40)
+  xlab("") + 
+  ylab("")  +
+  # labs(fill = "Mean diving \nduration (min)")+
+  scale_fill_viridis_b()+
+  ggtitle('mean_Temp')
+
+
+
+
 
 

@@ -139,13 +139,22 @@ for (i in 1:length(SealIDS)) {
   #######################################################
   
   divessummary <- divessummary %>%
-    mutate(therm_depth = ifelse(Therm_dep>0 & Tmld>0 & abs(Therm_dep-Tmld)<=10, (Therm_dep+Tmld)/2,
-                                ifelse(Therm_dep > 0 & is.na(Tmld), NA, # was Therm_dep before NA
-                                       ifelse(Tmld > 0 & is.na(Therm_dep), Tmld,
-                                              ifelse(Therm_dep>0 & Tmld>0 & abs(Therm_dep-Tmld)>10, Therm_dep,NA)))),
-           diff_therm = ifelse(Therm_dep > 0 & Tmld >0, (Therm_dep-Tmld),NA), #error estimate
+    mutate(therm_depth = ifelse(!is.na(Therm_dep) & !is.na(Tmld) & abs(Therm_dep-Tmld)<=10 & Therm_dep-Tmld>=0, Tmld,
+                                ifelse(!is.na(Therm_dep) & !is.na(Tmld) & abs(Therm_dep-Tmld)<=10 & Tmld-Therm_dep>0, Therm_dep,
+                                       ifelse(!is.na(Therm_dep) & is.na(Tmld), NA, # was Therm_dep before NA
+                                              ifelse(!is.na(Tmld) & is.na(Therm_dep), Tmld,
+                                                     ifelse(!is.na(Therm_dep) & !is.na(Tmld) & abs(Therm_dep-Tmld)>10, Therm_dep,NA))))),
+           diff_therm = ifelse(!is.na(Therm_dep) & !is.na(Tmld), (Therm_dep-Tmld),NA), #error estimate
            hunt_diff_Therm = Mdepth_hunting-therm_depth,
            max_diff_Therm = max.d-therm_depth)
+  
+  #######################################################
+  ### Redo Thermocline presence based on above ###
+  #######################################################
+  
+  divessummary$Thermocline <- NULL
+  divessummary <- divessummary %>%
+    mutate(Thermocline = ifelse(!is.na(therm_depth), 'present','absent'))
   
   #####################
   ### Add hARS_mode ###
@@ -194,7 +203,7 @@ for (i in 1:length(SealIDS)) {
   ### saveRDS divessummary ###
   ############################
   
-  col_list = c('sealID','ft','bout','start','lon','lat','diel_phase','JDay','all.dur','distances..m.','mean_Temp','deltaT','dive_efficiency','ht_rat','hARS_mode','max.d','Mdepth_hunting','Thermocline','hunt_diff_Therm','max_diff_Therm','X','Nt','pdsi','bottom_time','hunting_time','X.bt.dt')
+  col_list = c('sealID','ft','bout','start','lon','lat','diel_phase','JDay','all.dur','distances..m.','mean_Temp','deltaT','dive_efficiency','ht_rat','hARS_mode','max.d','Mdepth_hunting','Thermocline','hunt_diff_Therm','max_diff_Therm','X','Nt','pdsi','bottom_time','hunting_time','X.bt.dt','therm_depth','Tmld','Therm_dep')
   
   filtered_divestats <- filtered_divestats %>% dplyr::select(col_list)
   saveRDS(filtered_divestats,file.path(save_divessummary,paste(sealID,"_filtered_divestats.rds",sep = "")),compress = TRUE)

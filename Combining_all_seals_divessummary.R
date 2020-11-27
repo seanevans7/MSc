@@ -39,7 +39,7 @@ library(lme4)
 # install.packages('nlme')
 library(nlme)
 # library(lmerTest)
-
+library('mgcv')
 #require(GGally)
 #require(reshape2)
 #require(compiler)
@@ -81,28 +81,19 @@ for (i in 1:length(SealIDS)) {
   }
 }
 
+summary(dives)
+
 ###### Fixing Thermocline column
 # str(dives$Thermocline)
 dives$Thermocline <- as.factor(dives$Thermocline)
-dives[(which(dives$Thermocline == "")),'Thermocline'] <- as.factor('absent')
-dives$Thermocline <- droplevels(dives$Thermocline)
-table(dives$Thermocline,dives$diel_phase)
+# dives[(which(dives$Thermocline == "")),'Thermocline'] <- as.factor('absent')
+# dives$Thermocline <- droplevels(dives$Thermocline)
+# table(dives$Thermocline,dives$diel_phase)
 
 ###### Fixing ft,pdsi and mean_Temp columns by removing Na
 dives <- dives[which(!is.na(dives$ft)),]
 dives <- dives[which(!is.na(dives$mean_Temp)),]
 dives <- dives[which(!is.na(dives$pdsi)),]
-
-# Saving data
-save_all = 'Plots & Dive Tables/'
-saveRDS(dives,file.path(save_all,"dives.rds"))
-saveRDS(dives_sr,file.path(save_all,"dives_sr.rds"))
-write.csv(dives_sr,paste0(save_all,"dives_sr.csv"))
-saveRDS(locs,file.path(save_all,"locs.rds"))
-
-# Reading data
-dives = readRDS(file.path(save_all,"dives.rds"))
-locs = readRDS(file.path(save_all,"locs.rds"))
 
 ################# Reduce dives to those without nan values for ft and bout   #################
 dives <- dives[!is.na(dives$ft) | !is.na(dives$bout),] # or dives <- dives[which(!is.na(dives$ft) | !is.na(dives$bout))]
@@ -119,6 +110,14 @@ dives$diel_phase<-as.factor(dives$diel_phase)
 
 ##### sealID to factor
 dives$sealID <- as.factor(dives$sealID)
+
+
+###### add season column to locs using JDay ############
+locs$JDay = as.numeric(locs$JDay)
+locs$season = NaN
+locs[which(locs$JDay>92&locs$JDay<275),]$season = 'winter' # winter (Apr-Sep)
+locs[which(locs$JDay<=92|locs$JDay>=275),]$season = 'summer' # summer (Oct-Mar)
+locs$season <- as.factor(locs$season)
 
 # Dive  residuals ----------------------------------------
 
@@ -247,6 +246,7 @@ qqline(residuals(M1))
 # Add dive_res column and basic plot exploration --------------------------
 
 dives$dive_res = resid(M1)
+
 # ggplot(dives, aes(x=dive_res,y=seq(1,NROW(dives),1)))+
 #   geom_point()
 ggplot(dives, aes(x=dive_res))+
@@ -311,6 +311,22 @@ ggplot(dives %>% filter(JDay>92&JDay<275), aes(x=diel_phase, y=dive_res, fill=di
 # # e.g. Model1.Drop1 <-update(M8, .~.-max.d)
 # # anova(Model1, Model1.Drop1)
 
+
+# Saving dives (Not including surface residuals) --------------------------
+
+# Saving data
+save_all = 'Plots & Dive Tables/'
+saveRDS(dives,file.path(save_all,"dives.rds"))
+saveRDS(dives_sr,file.path(save_all,"dives_sr.rds"))
+write.csv(dives_sr,paste0(save_all,"dives_sr.csv"))
+saveRDS(locs,file.path(save_all,"locs.rds"))
+
+# Reading data
+save_all = 'Plots & Dive Tables/'
+dives = readRDS(file.path(save_all,"dives.rds"))
+locs = readRDS(file.path(save_all,"locs.rds"))
+
+
 # Surface residuals -------------------------------------------------------
 
 ###### Surface residuals ##### # Essentially the physiological measure of cost
@@ -318,6 +334,7 @@ ggplot(dives %>% filter(JDay>92&JDay<275), aes(x=diel_phase, y=dive_res, fill=di
 
 dives_sr <- dives[which(dives$pdsi<120),] # 2 minutes
 NROW(dives_sr)/NROW(dives)*100
+
 # Only looking at dives that are within 2 minutes of each other (within bouts) accounts for 88% of the data
 ggplot(dives_sr, aes(x=season, y=pdsi, fill=season))+
   geom_boxplot()+
@@ -688,3 +705,11 @@ dives %>% group_by(divetype,Thermocline) %>% count()
 # % of dives without hunting
 dives %>% filter(ht_rat==0) %>% NROW()/dives %>% NROW()*100
 
+
+
+# Effect of physical water properties on dive types -----------------------
+
+ggplot(winter_dives,aes(x=divetype,y=Nt,fill = divetype))+geom_boxplot()+ylab('Nt')
+
+my_gam_model <- gamm(divetype~Nt+mean_Temp+Thermocline+lat+lon, random=list(sealID=~1), data=winter_dives, family = binomial)
+ 
