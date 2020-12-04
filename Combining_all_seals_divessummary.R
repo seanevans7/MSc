@@ -81,6 +81,76 @@ for (i in 1:length(SealIDS)) {
   }
 }
 
+# Changing thermocline depths and presence
+for (i in 1:length(SealIDS)) {
+  print(i)
+  sealID = SealIDS[i]
+  save_loc = paste("Plots & Dive Tables/Seal",sealID, sep = "")
+  Thermoclines1 <- read_csv(file.path(save_loc,paste("Thermoclines1.csv",sep = '')))
+  Thermoclines1$sealID <- NaN
+  Thermoclines1$sealID <- as.numeric(sealID)
+
+  if (i==1) {
+    Thermoclines = Thermoclines1
+  }
+
+  else{
+    Thermoclines = rbind(Thermoclines,Thermoclines1)
+  }
+}
+
+Thermoclines$X1 <- seq(1,348750,1)
+Thermoclines<-anti_join(Thermoclines,Thermoclines %>% group_by(sealID) %>% filter(row_number()==1),by='X1')
+Thermoclines$X1 <- seq(1,348711,1)
+Thermoclines$sealID = NULL
+dives$therm_depth = NULL
+dives$Tmld = NULL
+dives$Therm_dep = NULL
+dives$X1 <- seq(1,348711,1)
+dives<-full_join(dives,Thermoclines,by='X1')
+dives$X1 = NULL
+
+#######################################################
+### Add max_diff_Therm & hunt_diff_Therm ###
+#######################################################
+
+dives <- dives %>%
+  mutate(therm_depth = ifelse(!is.na(Therm_dep) & !is.na(Tmld) & abs(Therm_dep-Tmld)<=10 & Therm_dep-Tmld>=0, Tmld,
+                              ifelse(!is.na(Therm_dep) & !is.na(Tmld) & abs(Therm_dep-Tmld)<=10 & Tmld-Therm_dep>0, Therm_dep,
+                                     ifelse(!is.na(Therm_dep) & is.na(Tmld), NA, # was Therm_dep before NA
+                                            ifelse(!is.na(Tmld) & is.na(Therm_dep), Tmld,
+                                                   ifelse(!is.na(Therm_dep) & !is.na(Tmld) & abs(Therm_dep-Tmld)>10 & Therm_dep-Tmld>=0, Tmld,
+                                                          ifelse(!is.na(Therm_dep) & !is.na(Tmld) & abs(Therm_dep-Tmld)>10 & Tmld-Therm_dep>0, Therm_dep,NA)))))),
+         diff_therm = ifelse(!is.na(Therm_dep) & !is.na(Tmld), (Therm_dep-Tmld),NA), #error estimate
+         hunt_diff_Therm = Mdepth_hunting-therm_depth,
+         max_diff_Therm = max.d-therm_depth)
+
+#######################################################
+### Re-doing Thermocline presence based on above ###
+#######################################################
+
+dives$Thermocline <- NULL
+dives <- dives %>%
+  mutate(Thermocline = ifelse(!is.na(therm_depth), 'present','absent'))
+
+# # Checking dives (divessummary and Thernmocline1)
+# for (i in 1:length(SealIDS)) {
+#   print(i)
+#   sealID = SealIDS[i]
+#   save_divessummary = paste("Plots & Dive Tables/Seal",sealID, sep = "")
+#   divessummary1 <- read.csv(file.path(save_divessummary,"divessummary.csv"),sep=',')
+#   
+#   if (i==1) {
+#     divessummary = divessummary1[,c('sealID','max.d')]
+#   }
+#   
+#   else{
+#     divessummary = rbind(divessummary,divessummary1[,c('sealID','max.d')])
+#   }
+# }
+
+
+
 summary(dives)
 
 ###### Fixing Thermocline column
@@ -91,7 +161,7 @@ dives$Thermocline <- as.factor(dives$Thermocline)
 # table(dives$Thermocline,dives$diel_phase)
 
 ###### Fixing ft,pdsi and mean_Temp columns by removing Na
-dives <- dives[which(!is.na(dives$ft)),]
+dives <- dives[which(!is.na(dives$ft)),] # 
 dives <- dives[which(!is.na(dives$mean_Temp)),]
 dives <- dives[which(!is.na(dives$pdsi)),]
 
@@ -100,10 +170,25 @@ dives <- dives[!is.na(dives$ft) | !is.na(dives$bout),] # or dives <- dives[which
 # Omit dives that do not fit into within 24hours of the foraging trip interval time limits
 
 ###### add season column to dives using JDay ############
+# Use 92+15 and 275+15 to avoid winter 'dives' in 'summer.' - refer to plot Seasonal_distribution_of_seal_data in 'Plots & Dive Tables\All seals\Exploratory analysis'
 dives$season = NaN
-dives[which(dives$JDay>92&dives$JDay<275),]$season = 'winter' # winter (Apr-Sep)
-dives[which(dives$JDay<=92|dives$JDay>=275),]$season = 'summer' # summer (Oct-Mar)
+dives[which(dives$JDay>107&dives$JDay<290),]$season = 'winter' # winter (Apr-Sep)
+dives[which(dives$JDay<=107|dives$JDay>=290),]$season = 'summer' # summer (Oct-Mar)
 dives$season <- as.factor(dives$season)
+
+# This is from database in C:\Users\Sean Evans\Documents\2020\MSc\Computing\MSc
+Wyear = tibble(year=c(2009,2009,2009,2009,2011,2011,2011,2012,2012,2013,2011,2011,2011,2011,2012,2013,2013,2013,2014),
+       season=rep('winter',19),
+       dives %>% group_by(season,sealID) %>% count() %>% filter(season=='winter') %>% select(sealID) %>% ungroup() %>% select(sealID))
+       
+Syear = tibble(year=c(2011,2011,2011,2011,2012,2012,2012,2012,2012,2012,2012,2012,2013,2013,2013,2013,2013,2015,2015,2014),
+               season=rep('summer',20),
+               dives %>% group_by(season,sealID) %>% count() %>% filter(season=='summer') %>% select(sealID) %>% ungroup() %>% select(sealID))
+
+year_metadata = rbind(Wyear,Syear)
+year_metadata$season = NULL
+dives<-full_join(dives,year_metadata,by='sealID')
+dives$year <- as.factor(dives$year)
 
 ##### diel phase to factor
 dives$diel_phase<-as.factor(dives$diel_phase)
@@ -113,10 +198,11 @@ dives$sealID <- as.factor(dives$sealID)
 
 
 ###### add season column to locs using JDay ############
+# Use 92+15 and 275+15 to avoid winter 'dives' in 'summer.' - refer to plot Seasonal_distribution_of_seal_data in 'Plots & Dive Tables\All seals\Exploratory analysis'
 locs$JDay = as.numeric(locs$JDay)
 locs$season = NaN
-locs[which(locs$JDay>92&locs$JDay<275),]$season = 'winter' # winter (Apr-Sep)
-locs[which(locs$JDay<=92|locs$JDay>=275),]$season = 'summer' # summer (Oct-Mar)
+locs[which(locs$JDay>107&locs$JDay<290),]$season = 'winter' # winter (Apr-Sep)
+locs[which(locs$JDay<=107|locs$JDay>=290),]$season = 'summer' # summer (Oct-Mar)
 locs$season <- as.factor(locs$season)
 
 # Dive  residuals ----------------------------------------
@@ -244,21 +330,21 @@ qqline(residuals(M1))
 # 
 
 # Add dive_res column and basic plot exploration --------------------------
-
-dives$dive_res = resid(M1)
+res <- residuals(M1)
+dives$dive_res <- res
 
 # ggplot(dives, aes(x=dive_res,y=seq(1,NROW(dives),1)))+
 #   geom_point()
 ggplot(dives, aes(x=dive_res))+
   geom_histogram(bins=30)
-#Summer (Oct-Mar)
-ggplot(dives %>% filter(JDay<=92|JDay>=275), aes(x=diel_phase, y=dive_res, fill=diel_phase))+
+#Summer (Oct15-Apr15)
+ggplot(dives %>% filter(JDay<=107|JDay>=290), aes(x=diel_phase, y=dive_res, fill=diel_phase))+
   geom_boxplot(outlier.shape=NA)+
   ylim(-4,6)+
   guides(fill=F)+
   ggtitle('Summer dive_res')
-#Winter (Apr-Sep)
-ggplot(dives %>% filter(JDay>92&JDay<275), aes(x=diel_phase, y=dive_res, fill=diel_phase))+
+#Winter (Apr15-Oct15)
+ggplot(dives %>% filter(JDay>107&JDay<290), aes(x=diel_phase, y=dive_res, fill=diel_phase))+
   geom_boxplot(outlier.shape=NA)+
   ylim(-4,6)+
   guides(fill=F)+
@@ -315,8 +401,10 @@ ggplot(dives %>% filter(JDay>92&JDay<275), aes(x=diel_phase, y=dive_res, fill=di
 # Saving dives (Not including surface residuals) --------------------------
 
 # Saving data
+dives_pdsi <- dives[dives$pdsi<900,]
 save_all = 'Plots & Dive Tables/'
 saveRDS(dives,file.path(save_all,"dives.rds"))
+saveRDS(dives_pdsi,file.path(save_all,"dives_pdsi.rds"))
 saveRDS(dives_sr,file.path(save_all,"dives_sr.rds"))
 write.csv(dives_sr,paste0(save_all,"dives_sr.csv"))
 saveRDS(locs,file.path(save_all,"locs.rds"))
@@ -326,6 +414,30 @@ save_all = 'Plots & Dive Tables/'
 dives = readRDS(file.path(save_all,"dives.rds"))
 locs = readRDS(file.path(save_all,"locs.rds"))
 
+
+
+
+
+# Adding divetype to locs as a proportion ---------------------------------
+
+SealIDS = c(1,2,4,5,seq(13,25,1),31,47,seq(49,53,1),57,58,seq(62,70,1),109,110,112,113)
+locs$divetype_prop <- NA # No. of dives that are 
+
+for (i in 1:length(SealIDS)) {
+  print(i)
+  sealID = SealIDS[i]
+  
+  system.time({
+    for(j in 1: (nrow(loc1))) {
+      loc1 <- locs %>% filter(id==sealID)
+      mvar <- summer_dives %>% filter(sealID==sealID,lat==loc1$lat,lon==loc1$lon)
+      loc1$divetype_prop[j] <- NROW(new_df)/NROW(mvar)
+    }
+    else {
+      loc1$strat_prop[j] <- 0
+    }
+  }
+})
 
 # Surface residuals -------------------------------------------------------
 
@@ -647,7 +759,7 @@ dives[which(dives$ht_rat==0),]$hunting = 'transit'
 dives[which(dives$ht_rat>0),]$hunting = 'hunting' 
 
 
-Therm_table<- dives %>% group_by(Thermocline,hunting) %>% 
+Therm_table<- dives %>% group_by(Thermocline) %>% 
   summarise('Dive_duration' = mean(all.dur),
             'Dive_depth' = mean(max.d),
             'Bottom_time' = mean(bottom_time),
@@ -659,7 +771,7 @@ Therm_table<- dives %>% group_by(Thermocline,hunting) %>%
             'dist_to_thermocline' = mean(hunt_diff_Therm),
             'Mdepth_hunting' = mean(Mdepth_hunting),
             'hunt_diff_therm' = mean(na.omit(hunt_diff_Therm)),
-            'max_diff_therm' = mean(na.omit(max_diff_Therm))) %>% t() %>% tidy() 
+            'max_diff_therm' = mean(na.omit(max_diff_Therm))) %>% t() 
 colnames(Therm_table) <- Therm_table[1,]
 Therm_table<-Therm_table[-1,]
 Therm_table
@@ -713,3 +825,64 @@ ggplot(winter_dives,aes(x=divetype,y=Nt,fill = divetype))+geom_boxplot()+ylab('N
 
 my_gam_model <- gamm(divetype~Nt+mean_Temp+Thermocline+lat+lon, random=list(sealID=~1), data=winter_dives, family = binomial)
  
+
+
+
+# West-East analysis of physical oceanography -----------------------------
+dives = dives[dives$pdsi<900,]
+# Summer
+east <- dives %>% filter(lon>=37.746368 & season=='summer') %>% mutate(zonal_dir='East')
+west <- dives %>% filter(lon<37.746368 & season=='summer') %>% mutate(zonal_dir='West')
+west$sealID %>% NROW()
+west %>% group_by(sealID) %>% count()
+east %>% group_by(sealID) %>% count()
+we_dives <- rbind(west,east)
+rm(west,east)
+we_dives$zonal_dir <- as.factor(we_dives$zonal_dir)
+ggplot(we_dives, aes(therm_depth))+
+  geom_histogram(color='black',bins=60,na.rm=TRUE)+
+  facet_wrap(zonal_dir~.)+
+  ggtitle('Therm_depth')
+
+# winter
+east <- dives %>% filter(lon>=37.746368 & season=='winter') %>% mutate(zonal_dir='East')
+west <- dives %>% filter(lon<37.746368 & season=='winter') %>% mutate(zonal_dir='West')
+west %>% group_by(sealID) %>% count()
+east %>% group_by(sealID) %>% count()
+we_dives <- rbind(west,east)
+rm(west,east)
+we_dives$zonal_dir <- as.factor(we_dives$zonal_dir)
+ggplot(we_dives, aes(therm_depth))+
+  geom_histogram(color='black',bins=60,na.rm=TRUE)+
+  facet_wrap(zonal_dir~.)+
+  ggtitle('Therm_depth')
+
+# Seasonality and inter-annual data structure
+
+# What is the seasonal distributoion of data. From this we can see if it would be worth it to split data into e.g. late summer and early summer to see if there would be a greater difference in mean temperature profile. 
+# Create a text
+grob1 <- grobTree(textGrob("Summer", x=0.1,  y=0.95, hjust=0, vjust=0.2,
+                          gp=gpar(col="red", fontsize=12, fontface="italic")))
+grob2 <- grobTree(textGrob("Summer", x=0.8,  y=0.95, hjust=0, vjust=0.2,
+                           gp=gpar(col="red", fontsize=12, fontface="italic")))
+grob3 <- grobTree(textGrob("Winter", x=0.52,  y=0.95, hjust=0, vjust=0.2,
+                           gp=gpar(col="blue", fontsize=12, fontface="italic")))
+grob4 <- grobTree(textGrob("15 April", x=0.30,  y=0.90, hjust=1, vjust=0, rot = 90,
+                           gp=gpar(col="black", fontsize=12, fontface="italic")))
+grob5 <- grobTree(textGrob("15 October", x=0.755,  y=0.90, hjust=1, vjust=0, rot = 90,
+                           gp=gpar(col="black", fontsize=12, fontface="italic")))
+ggplot(dives)+
+  geom_histogram(aes(JDay,fill=year),bins = 365)+
+  geom_vline(aes(xintercept = 107),size=1, col='blue')+
+  geom_vline(aes(xintercept = 290),size=1, col='red')+
+  annotation_custom(grob1)+
+  annotation_custom(grob2)+
+  annotation_custom(grob3)+
+  annotation_custom(grob4)+
+  annotation_custom(grob5)+
+  theme_bw()+
+  ggtitle('Seasonal_distribution_of_seal_data')
+  theme(plot.title = element_text(size=22,face="bold"),
+        axis.title=element_text(size=18,face="bold"),
+        legend.title = element_text(face="bold",size=18),axis.text.x = element_text(size=12),axis.text.y = element_text(size=12))
+rm(grob1,grob2,grob3,grob4,grob5)

@@ -51,6 +51,10 @@ library("FactoMineR")
 library("corrplot")
 library('corrr')
 library('ggraph')
+library('NbClust')
+# library(fpc)
+library('mgcv')
+
 
 #create a dummy data frame
 # new_my_data <- dummy.data.frame(dives, names = c("diel_phase",'season','Thermocline')) #Takes factors and creates a column for each level, which is made of 0s and 1s 
@@ -64,8 +68,10 @@ summary(new_my_data)
 winter_dives <- new_my_data[new_my_data$season=='winter',]
 summer_dives <- new_my_data[new_my_data$season=='summer',]
 # Simple correlation first using stats::cor()
-correlations <- summer_dives %>%
-  dplyr::select("ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt") %>% #'bottom_time','all.dur', "dive_efficiency","hunting_time"
+# All options: #'bottom_time','all.dur', "dive_efficiency","hunting_time","ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt"
+correlations <- summer_dives %>% # winter: "all.dur", "ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt")
+  # summer: "ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt"
+  dplyr::select("ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt") %>% 
   cor() %>% data.frame() 
 correlations
 # Simple correlation first using corrr::correlate() (I get the same answer... than with stats::cor())
@@ -76,7 +82,7 @@ correlations
 #   network_plot()
 # 
 tidy_cors <- summer_dives %>%
-  dplyr::select('dive_efficiency','ht_rat','max.d','pdsi','dive_res','bottom_time') %>%
+  dplyr::select("ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt") %>%
   correlate() %>%
   stretch() %>%
   filter(abs(r) > .3) #%>%
@@ -138,22 +144,28 @@ fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
 # Contributions of variables to PC2
 fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
 # Contributions of variables to PC1&2
-fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10)
+fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10) # dashed line: the average contribution that all values would be equal to if they all had the same contribution.
 # Color by contributionson the factor map
 fviz_pca_var(res.pca, col.var = "contrib",
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07")
 )
 
 
+
+
+
 # Cluster analysis --------------------------------------------------------
 # https://www.datanovia.com/en/lessons/clara-in-r-clustering-large-applications/
+# K-means clustering requires all variables to be continuous.
 # 'all.dur' and 'bottom_time' are highly corellated with all other variables in winter (using vif function)
 # 'all.dur' is highly corellated with all other variables in summer (using vif function)
 # Then those variables that are correlated to other single variables in the data are excluded (using threshold r2 of 0.6)
 # Finally whether the variable contributes to the variation in the data by length of vector in PCA (e.g. hARS_mode)
 
-NB_vars_winter <- c('ht_rat','max.d','pdsi','dive_res') # dive_res and ht_rat are somewhat correlated (0.48) and ht_rat and max.d are somewhat correlated (-0.54 inverse)
-NB_vars_summer <- c("ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt")
+######## Summer #######
+
+NB_vars_winter <- c('all.dur','max.d','ht_rat','dive_res','X.bt.dt') # dive_res and ht_rat are somewhat correlated (0.48) and ht_rat and max.d are somewhat correlated (-0.54 inverse)
+NB_vars_summer <- c("dive_res","ht_rat","X.bt.dt","max.d")
 winter_dives <- new_my_data[new_my_data$season=='winter',]
 # winter_dives <- winter_dives[winter_dives$ht_rat!=0,]
 summer_dives <- new_my_data[new_my_data$season=='summer',]
@@ -162,42 +174,117 @@ summer_dives <- new_my_data[new_my_data$season=='summer',]
 ### Cluster
 summer_dives_clus <- summer_dives[,NB_vars_summer] %>% scale() %>% na.omit()
 
-fviz_nbclust(summer_dives_clus, clara, method = "gap_stat")  + # Other methods: 'silhouette' or 'gap_stat')
-  geom_vline(xintercept = 3, linetype = 2)
-summer_dives_clus<-clara(summer_dives_clus,4, samples = 50, pamLike = TRUE) # default samples = 5, recommend to set samples an order of magnitude larger
+# NbClust(summer_dives_clus, method = 'centroid', min.nc = 2, max.nc = 6)
+
+# fviz_nbclust(summer_dives_clus, FUNcluster = cluster::clara, method = "silhouette",k.max = 5, nboot = 50)  + # Other methods: 'silhouette' or 'gap_stat')
+# geom_vline(xintercept = 3, linetype = 2) # Check NbClust package
+summer_dives_cluster<-clara(summer_dives_clus,2, samples = 50, pamLike = TRUE) # default samples = 5, recommend to set samples an order of magnitude larger
 # winter_dives_clus<-fanny(winter_dives_clus,2) #Error: cannot allocate vector of size 252.4 Gb
 # winter_dives_clus<-pam(winter_dives_clus,2) #260273 observations, but not more than 65536 are allowed
 # clusGap(winter_dives_clus, FUN = clara, K.max = 8, B = 60) # Error: cannot allocate vector of size 252.4 Gb
 
-
+##### Plotting
 # plot(winter_dives_clus)#), ask = TRUE)
-clusplot(summer_dives_clus)
+clusplot(summer_dives_cluster)
+# plot(summer_dives_clus)
+fviz_cluster(summer_dives_cluster, geom = "point") + ggtitle("k = 2")
+fviz_silhouette(summer_dives_cluster)
+# clusGap(winter_dives_clus, K.max = 2, FUNcluster = cluster::clara)
+# fviz_gap_stat(winter_dives_clus)
+# Add divetype to summer_dives
 summer_dives$divetype <- NA
-summer_dives$divetype <- summer_dives_clus$clustering
-
+summer_dives$divetype <- summer_dives_cluster$clustering
 summer_dives %>% group_by(divetype) %>% count()
-
 summer_dives$divetype<-as.factor(summer_dives$divetype)
 
+# ggplot(winter_dives,aes(x=divetype,y=dive_res,fill = divetype))+geom_boxplot()
 
-for (i in 1:length(NB_vars_winter)){
-  print(i)
-  meanss <- winter_dives %>% group_by(divetype) %>% summarise(means = mean(NB_vars_winter[i])) %>% data.frame()
-  p <- ggplot(winter_dives,aes(x=divetype,y=NB_vars_winter[i],fill = divetype))+geom_boxplot()+
-          ggtitle(paste0('m1 = ',round(meanss[1,2],3),', m2 = ',round(meanss[2,2],3),', m3 = ',round(meanss[3,2],3)))
-  save.image(paste0('C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc/Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Winter (k=3)/NB_vars/',NB_vars_winter[i],'.png'))
-}
+# for (i in 1:length(NB_vars_summer)){
+#   print(i)
+#   x <- NB_vars_summer[i]
+#   meanss <- summer_dives %>% group_by(divetype) %>% summarise(means = mean(eval(parse(text=x)))) %>% data.frame()
+#   png(paste0('C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc/Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Summer (k=2)/NB vars/',NB_vars_summer[i],'.png'))
+#   ggplot(summer_dives,aes(x=divetype,y=eval(parse(text=x)),fill = divetype))+geom_boxplot()+ylab(NB_vars_summer[i]) +
+#     ggtitle(paste0('m1 = ',round(meanss[1,2],3),', m2 = ',round(meanss[2,2],3)))#,', m3 = ',round(meanss[3,2],3)))
+#   dev.off()
+# }
+length(NB_vars_summer)
+i = 4
+x <- NB_vars_summer[i]
+meanss <- summer_dives %>% group_by(divetype) %>% summarise(means = mean(eval(parse(text=x)))) %>% data.frame()
+png(paste0('C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc/Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Summer (k=2)/NB vars/',NB_vars_summer[i],'.png'))
+ggplot(summer_dives,aes(x=divetype,y=eval(parse(text=x)),fill = divetype))+geom_boxplot()+ylab(NB_vars_summer[i])
+ggtitle(paste0('m1 = ',round(meanss[1,2],3),', m2 = ',round(meanss[2,2],3)))#,', m3 = ',round(meanss[3,2],3)))
+dev.off()
 
-fviz_cluster(summer_dives_clus, geom = "point") + ggtitle("k = 4")
+save_tmp = 'Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Summer (k=2)/NB vars/'
+saveRDS(summer_dives,file.path(save_tmp,"summer_dives.rds"))
+
+
+######## Winter #######
+
+NB_vars_winter <- c('all.dur','max.d','ht_rat','dive_res','X.bt.dt') # dive_res and ht_rat are somewhat correlated (0.48) and ht_rat and max.d are somewhat correlated (-0.54 inverse)
+NB_vars_summer <- c("dive_res","ht_rat","X.bt.dt","max.d")
+winter_dives <- new_my_data[new_my_data$season=='winter',]
+# winter_dives <- winter_dives[winter_dives$ht_rat!=0,]
+summer_dives <- new_my_data[new_my_data$season=='summer',]
+# summer_dives <- summer_dives[summer_dives$ht_rat!=0,]
+
+### Cluster
+winter_dives_clus <- winter_dives[,NB_vars_winter] %>% scale() %>% na.omit()
+
+# NbClust(summer_dives_clus, method = 'centroid', min.nc = 2, max.nc = 6)
+
+# fviz_nbclust(summer_dives_clus, FUNcluster = cluster::clara, method = "silhouette",k.max = 5, nboot = 50)  + # Other methods: 'silhouette' or 'gap_stat')
+  # geom_vline(xintercept = 3, linetype = 2) # Check NbClust package
+winter_dives_cluster<-clara(winter_dives_clus,2, samples = 50, pamLike = TRUE) # default samples = 5, recommend to set samples an order of magnitude larger
+# winter_dives_clus<-fanny(winter_dives_clus,2) #Error: cannot allocate vector of size 252.4 Gb
+# winter_dives_clus<-pam(winter_dives_clus,2) #260273 observations, but not more than 65536 are allowed
+# clusGap(winter_dives_clus, FUN = clara, K.max = 8, B = 60) # Error: cannot allocate vector of size 252.4 Gb
+
+##### Plotting
+# plot(winter_dives_clus)#), ask = TRUE)
+clusplot(winter_dives_cluster)
+# plot(summer_dives_clus)
+fviz_cluster(winter_dives_cluster, geom = "point") + ggtitle("k = 2")
+fviz_silhouette(winter_dives_cluster)
+# clusGap(winter_dives_clus, K.max = 2, FUNcluster = cluster::clara)
+# fviz_gap_stat(winter_dives_clus)
+# Add divetype to summer_dives
+winter_dives$divetype <- NA
+winter_dives$divetype <- winter_dives_cluster$clustering
+winter_dives %>% group_by(divetype) %>% count()
+winter_dives$divetype<-as.factor(winter_dives$divetype)
+
+# ggplot(winter_dives,aes(x=divetype,y=dive_res,fill = divetype))+geom_boxplot()
+
+# for (i in 1:length(NB_vars_winter)){
+#   print(i)
+#   x <- NB_vars_winter[i]
+#   meanss <- winter_dives %>% group_by(divetype) %>% summarise(means = mean(eval(parse(text=x)))) %>% data.frame()
+#   png(paste0('C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc/Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Winter (k=2)/NB vars/',NB_vars_winter[i],'.png'))
+#   ggplot(winter_dives,aes(x=divetype,y=eval(parse(text=x)),fill = divetype))+geom_boxplot()+ylab(NB_vars_winter[i]) +
+#   ggtitle(paste0('m1 = ',round(meanss[1,2],3),', m2 = ',round(meanss[2,2],3)))#,', m3 = ',round(meanss[3,2],3)))
+#   dev.off()
+# }
+length(NB_vars_winter)
+i = 5
+x <- NB_vars_winter[i]
+meanss <- winter_dives %>% group_by(divetype) %>% summarise(means = mean(eval(parse(text=x)))) %>% data.frame()
+png(paste0('C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc/Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Winter (k=2)/NB vars/',NB_vars_winter[i],'.png'))
+ggplot(winter_dives,aes(x=divetype,y=eval(parse(text=x)),fill = divetype))+geom_boxplot()+ylab(NB_vars_winter[i])
+ggtitle(paste0('m1 = ',round(meanss[1,2],3),', m2 = ',round(meanss[2,2],3)))#,', m3 = ',round(meanss[3,2],3)))
+dev.off()
+
+save_tmp = 'Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Winter (k=2)/NB vars/'
+saveRDS(winter_dives,file.path(save_tmp,"winter_dives.rds"))
 
 
 # Cluster where ht_rat==0 -------------------------------------------------
 
-ggplot(winter_dives,aes(x=divetype,y=dive_res,fill = divetype))+geom_boxplot()
-
 #create a dummy data frame
 # new_my_data <- dummy.data.frame(dives, names = c("diel_phase",'season','Thermocline')) #Takes factors and creates a column for each level, which is made of 0s and 1s 
-new_my_data <- dives[dives$pdsi<900 & dives$ht_rat==0,]                            
+new_my_data <- dives[dives$pdsi<900 & dives$ht_rat!=0,]                            
 
 summary(new_my_data)
 
@@ -207,10 +294,12 @@ summary(new_my_data)
 winter_dives <- new_my_data[new_my_data$season=='winter',]
 summer_dives <- new_my_data[new_my_data$season=='summer',]
 # Simple correlation first using stats::cor()
-correlations <- winter_dives %>%
-  dplyr::select('dive_efficiency','ht_rat','max.d','pdsi','dive_res','bottom_time') %>% #'bottom_time','all.dur'
+# All options: #'bottom_time','all.dur', "dive_efficiency","hunting_time","ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt"
+correlations <- winter_dives %>% # winter: "all.dur", "ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt")
+  # summer: "ht_rat","hARS_mode","max.d","pdsi","dive_res","X.bt.dt"
+  dplyr::select("ht_rat","hARS_mode","max.d","pdsi","dive_res","hunting_time","X.bt.dt") %>% 
   cor() %>% data.frame() 
-
+correlations
 # Simple correlation first using corrr::correlate() (I get the same answer... than with stats::cor())
 #plotting correlations
 # new_my_data %>% 
@@ -219,7 +308,7 @@ correlations <- winter_dives %>%
 #   network_plot()
 # 
 tidy_cors <- winter_dives %>%
-  dplyr::select('dive_efficiency','ht_rat','max.d','pdsi','dive_res','bottom_time') %>%
+  dplyr::select("ht_rat","hARS_mode","max.d","pdsi","dive_res","hunting_time","X.bt.dt") %>%
   correlate() %>%
   stretch() %>%
   filter(abs(r) > .3) #%>%
@@ -249,7 +338,7 @@ winter_dives <- new_my_data[new_my_data$season=='winter',]
 summer_dives <- new_my_data[new_my_data$season=='summer',]
 
 # Only important variables
-res.pca <- PCA(winter_dives[,c('dive_efficiency','ht_rat','hARS_mode','max.d','pdsi','bottom_time','dive_res',"all.dur")], 
+res.pca <- PCA(winter_dives[,c("ht_rat","hARS_mode","max.d","pdsi","dive_res","hunting_time","X.bt.dt")], 
                graph = FALSE, scale.unit = TRUE)
 
 # fviz_pca_var(res.pca, col.var = "black")
@@ -266,28 +355,22 @@ corrplot(get_pca_var(res.pca)$cos2, is.corr=FALSE)
 # Total cos2 of variables on Dim.1 and Dim.2
 fviz_cos2(res.pca, choice = "var", axes = 1:2)
 
-
 # Color by cos2 values: quality on the factor map
 fviz_pca_var(res.pca, col.var = "cos2",
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
              repel = TRUE # Avoid text overlapping
 )
-
 #### Contribution of variables!
-
 # highlight the most contributing variables for each dimension
 corrplot(get_pca_var(res.pca)$contrib, is.corr=FALSE)
-
 # Graph contributions
 # The red dashed line on the graph above indicates the expected average contribution.
 # Contributions of variables to PC1
 fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
 # Contributions of variables to PC2
 fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
-
-fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10)
-
-
+# Contributions of variables to PC1&2
+fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10) # dashed line: the average contribution that all values would be equal to if they all had the same contribution.
 # Color by contributionson the factor map
 fviz_pca_var(res.pca, col.var = "contrib",
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07")
@@ -295,24 +378,65 @@ fviz_pca_var(res.pca, col.var = "contrib",
 
 
 # Cluster analysis --------------------------------------------------------
+# https://www.datanovia.com/en/lessons/clara-in-r-clustering-large-applications/
+# K-means clustering requires all variables to be continuous.
 # 'all.dur' and 'bottom_time' are highly corellated with all other variables in winter (using vif function)
 # 'all.dur' is highly corellated with all other variables in summer (using vif function)
 # Then those variables that are correlated to other single variables in the data are excluded (using threshold r2 of 0.6)
 # Finally whether the variable contributes to the variation in the data by length of vector in PCA (e.g. hARS_mode)
-NB_vars_winter <- c('ht_rat','max.d','pdsi','dive_res') # dive_res and ht_rat are somewhat correlated (0.48) and ht_rat and max.d are somewhat correlated (-0.54 inverse)
-NB_vars_summer <- c('ht_rat','hARS_mode','max.d','dive_res')
+
+NB_vars_winter <- c('all.dur','max.d','ht_rat','dive_res','X.bt.dt') # dive_res and ht_rat are somewhat correlated (0.48) and ht_rat and max.d are somewhat correlated (-0.54 inverse)
+NB_vars_summer <- c("dive_res","ht_rat","X.bt.dt","max.d")
 winter_dives <- new_my_data[new_my_data$season=='winter',]
+# winter_dives <- winter_dives[winter_dives$ht_rat!=0,]
 summer_dives <- new_my_data[new_my_data$season=='summer',]
+# summer_dives <- summer_dives[summer_dives$ht_rat!=0,]
 
 ### Cluster
-winter_dives_clus <- winter_dives[,NB_vars_winter] %>% scale() %>% na.omit()
+summer_dives_clus <- summer_dives[,NB_vars_summer] %>% scale() %>% na.omit()
 
-winter_dives_clus<-clara(winter_dives_clus,2)
-plot(winter_dives_clus)#), ask = TRUE)
+# NbClust(summer_dives_clus, method = 'centroid', min.nc = 2, max.nc = 6)
 
-winter_dives$divetype <- winter_dives_clus$clustering
+# fviz_nbclust(summer_dives_clus, FUNcluster = cluster::clara, method = "silhouette",k.max = 5, nboot = 50)  + # Other methods: 'silhouette' or 'gap_stat')
+# geom_vline(xintercept = 3, linetype = 2) # Check NbClust package
+summer_dives_cluster<-clara(summer_dives_clus,2, samples = 50, pamLike = TRUE) # default samples = 5, recommend to set samples an order of magnitude larger
+# winter_dives_clus<-fanny(winter_dives_clus,2) #Error: cannot allocate vector of size 252.4 Gb
+# winter_dives_clus<-pam(winter_dives_clus,2) #260273 observations, but not more than 65536 are allowed
+# clusGap(winter_dives_clus, FUN = clara, K.max = 8, B = 60) # Error: cannot allocate vector of size 252.4 Gb
 
-winter_dives %>% group_by(divetype) %>% count()
+##### Plotting
+# plot(winter_dives_clus)#), ask = TRUE)
+# clusplot(winter_dives_cluster)
+# plot(summer_dives_clus)
+fviz_cluster(summer_dives_cluster, geom = "point") + ggtitle("k = 5")
+fviz_silhouette(summer_dives_cluster)
+# clusGap(summer_dives_clus, K.max = 2, FUNcluster = cluster::clara)
+# fviz_gap_stat(summer_dives_clus)
+# Add divetype to summer_dives
+summer_dives$divetype <- NA
+summer_dives$divetype <- summer_dives_cluster$clustering
+summer_dives %>% group_by(divetype) %>% count()
+summer_dives$divetype<-as.factor(summer_dives$divetype)
 
-winter_dives$divetype<-as.factor(winter_dives$divetype)
-ggplot(winter_dives,aes(ht_rat,fill = divetype))+geom_boxplot()
+# ggplot(winter_dives,aes(x=divetype,y=dive_res,fill = divetype))+geom_boxplot()
+
+# for (i in 1:length(NB_vars_summer)){
+#   print(i)
+#   x <- NB_vars_summer[i]
+#   meanss <- summer_dives %>% group_by(divetype) %>% summarise(means = mean(eval(parse(text=x)))) %>% data.frame()
+#   png(paste0('C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc/Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Summer (k=2)/NB vars/',NB_vars_summer[i],'.png'))
+#   ggplot(summer_dives,aes(x=divetype,y=eval(parse(text=x)),fill = divetype))+geom_boxplot()+ylab(NB_vars_summer[i]) +
+#     ggtitle(paste0('m1 = ',round(meanss[1,2],3),', m2 = ',round(meanss[2,2],3)))#,', m3 = ',round(meanss[3,2],3)))
+#   dev.off()
+# }
+
+
+length(NB_vars_winter)
+i = 1
+x <- NB_vars_winter[i]
+meanss <- winter_dives %>% group_by(divetype) %>% summarise(means = mean(eval(parse(text=x)))) %>% data.frame()
+png(paste0('C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc/Plots & Dive Tables/All seals/Exploratory analysis/Cluster analysis/Winter (k=5)/NB vars/ht_rat not zero/',NB_vars_winter[i],'.png'))
+ggplot(winter_dives,aes(x=divetype,y=eval(parse(text=x)),fill = divetype))+geom_boxplot()+ylab(NB_vars_winter[i])
+ggtitle(paste0('m1 = ',round(meanss[1,2],3),', m2 = ',round(meanss[2,2],3),', m3 = ',round(meanss[3,2],3),'m4 = ',round(meanss[4,2],3),'m5 = ',round(meanss[5,2],3)))
+dev.off()
+

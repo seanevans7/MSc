@@ -67,7 +67,7 @@ for (i in 1:length(SealIDS)) {
   loc1 <- read_rds(file.path(save_loc1,paste(sealID,"_loc1.rds",sep = "")))
   save_bsm_seg_df = "bsm_seg_df"
   bsm_seg_df <- read_rds(file.path(save_bsm_seg_df,paste(sealID,"_bsm_seg_df.rds",sep = "")))
-  
+  # Thermoclines1 <- read_csv(file.path(save_loc,paste("Thermoclines1.csv",sep = '')))
   
   save_all_dives = "all_dives"
   all_dives <- read_rds(file.path(save_all_dives,paste(sealID,"_all_dives.rds",sep = "")))
@@ -149,7 +149,7 @@ for (i in 1:length(SealIDS)) {
            max_diff_Therm = max.d-therm_depth)
   
   #######################################################
-  ### Redo Thermocline presence based on above ###
+  ### Re-doing Thermocline presence based on above ###
   #######################################################
   
   divessummary$Thermocline <- NULL
@@ -178,7 +178,7 @@ for (i in 1:length(SealIDS)) {
   ### filtered_divestats ###
   ##############################
   
-  filtered_divestats <- divessummary %>% filter(max.d >4, all.dur>60)
+  filtered_divestats <- divessummary %>% filter(max.d >4, all.dur>60) # This is already accounted for in 'Quickdive' script
   
   # Add column for bouts - differentiated by 6 hours for filtered dives
   time_diff <- difftime(filtered_divestats$start, lag(filtered_divestats$start, default = filtered_divestats$start[1]), units = "sec")
