@@ -5,7 +5,8 @@ library(grid)
 library(ncmeta)
 library(tidync)
 library(tidyr)
-
+#install.packages("ggOceanMaps", repos = c("https://mikkovihtakari.github.io/drat", "https://cloud.r-project.org"))
+library(ggOceanMaps)
 # library('rgeos')
 # Add the Orsifronts
 # library(orsifronts)
@@ -67,13 +68,14 @@ sf_Marion <- data.frame("lon" = 37.746368, "lat" = -46.893361) %>%
 
 ### Bathymetry Gebco_20
 bathy_file = tidync('gebco_2020_n-20.478515625_s-65.33789277076721_w6.372072458267214_e72.9580078125.nc')
+bathy_file = tidync('GRIDONE_2D.nc')
 
 bathy_summer <- bathy_file %>% hyper_filter(lon = between(lon, 29, 46), 
                              lat = between(lat, -52, -45)) #%>% hyper_tibble()
 bathy_winter <- bathy_file %>% hyper_filter(lon = between(lon, 15, 55), 
                             lat = between(lat, -55, -39)) %>% hyper_tibble()
 ggplot() +
-  geom_raster(data=bathy_summer,aes(lon, lat, fill = elevation))+
+  geom_tile(data=bathy_summer,aes(lon, lat, fill = elevation))+
   geom_point(aes(x = lon , y = lat),data = locs[locs$season=='summer',])
 
 ggplot() +
@@ -81,18 +83,17 @@ ggplot() +
   geom_point(aes(x = lon , y = lat),data = locs[locs$season=='winter',])
 
 bathy_file = raster('gebco_2020_n-20.478515625_s-65.33789277076721_w6.372072458267214_e72.9580078125.nc')
-
+bathy_file = raster('GRIDONE_2D.nc')
 ############ Summer ###########
 ####### locs ########
-
-PF<-frnts2 %>% filter(name=='PF' & (lon>32) & (lon<46) & (lat>-52) & (lat<-45))
-SAF<-frnts2 %>% filter(name=='SAF' & (lon>32) & (lon<46) & (lat>-52) & (lat<-45))
+PF<-frnts2 %>% filter((name=='PF') & (lon>32) & (lon<46) & (lat>-52) & (lat<-45))
+SAF<-frnts2 %>% filter((name=='SAF') & (lon>32) & (lon<46) & (lat>-52) & (lat<-45))
 
 ggplot() +
   # geom_raster(data=bathy,aes(lon, lat, fill = elevation))+
   # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
   # coord_map("azequidistant", orientation = c(-90, 0, 0)) +
-  geom_tile(data = locs[locs$season=='summer',], aes(lon, lat, z = strat_prop),binwidth = 0.08, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_tile(data = locs[locs$season=='summer' & locs$year==2010,], aes(lon, lat, z = strat_prop),binwidth = 0.08, stat = "summary_2d", fun = mean,na.rm = TRUE)+
   scale_fill_gradientn(name = "% Stratification",colours = c("grey60", "blue", "orange"), values = c(0,0.1,1))+
   # geom_point(data = frnts2 %>% filter(name=='PF' | name=='SAF'), aes(x = lon, y = lat, colour = name),size=0.9)+ #, linetype = 1, name=='STF' | 
   geom_point(data = SAF, aes(x = lon, y = lat),size=0.9)+
@@ -115,12 +116,16 @@ ggplot() +
         legend.title = element_text(face="bold",size=18),legend.text = element_text(size=14),legend.key.size = unit(1.0, "cm"),axis.text.x = element_text(size=12),axis.text.y = element_text(size=12))
 
 ####### Dives strat_prop ######
-
+y=2015
+n = dives_pdsi %>% filter(season=='summer' & year==y) %>% NROW()
 ggplot() +
   # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
   # coord_map("azequidistant", orientation = c(-90, 0, 0)) +
-  geom_tile(data = locs[locs$season=='summer',], aes(lon, lat, z = strat_prop),binwidth = 0.08, stat = "summary_2d", fun = mean,na.rm = TRUE)+
-  geom_tile(data = dives %>% filter(season=='summer'), aes(lon, lat, z = therm_depth),binwidth = 0.1, stat = "summary_2d", fun = mean)+
+  geom_tile(data = locs[locs$season=='summer' & locs$year==y,], aes(lon, lat, z = strat_prop),binwidth = 0.08, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_tile(data = dives_pdsi %>% filter(season=='summer' & year==y), aes(lon, lat, z = therm_depth),binwidth = 0.1, stat = "summary_2d", fun = mean)+
+  #geom_raster(data=bathy_winter,aes(lon, lat, fill = elevation))+
+  
+  #geom_point(aes(x = lon , y = lat),data = locs[locs$season=='summer',])+
   scale_fill_gradientn(name = "T dep [m]",colours = c("grey60", "blue", "orange"), values = c('NA',0.1,1))+
   geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='green', data = sf_Marion)+
   geom_point(data = SAF, aes(x = lon, y = lat),size=0.9)+
@@ -134,7 +139,7 @@ ggplot() +
   xlab("") + 
   ylab("")  +
   # labs(fill = "Mean diving \nduration (min)")+
-  ggtitle('Thermocline depth [m]') +
+  ggtitle(paste0('Thermocline depth [m]  n=',as.character(n),' dives (',as.character(y),')')) +
   theme(plot.title = element_text(size=22,face="bold"),
         axis.title=element_text(size=18,face="bold"),
         legend.title = element_text(face="bold",size=18),legend.text = element_text(size=14),legend.key.size = unit(1.0, "cm"),axis.text.x = element_text(size=12),axis.text.y = element_text(size=12))
@@ -163,7 +168,7 @@ ggplot() +
         axis.title=element_text(size=18,face="bold"),
         legend.title = element_text(face="bold",size=18),legend.text = element_text(size=14),legend.key.size = unit(1.0, "cm"),axis.text.x = element_text(size=12),axis.text.y = element_text(size=12))
 
-####### Dives max.d ######
+####### Dives divetype ######
 
 ggplot() +
   # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
@@ -320,3 +325,38 @@ ggplot() +
 
 
 
+
+
+
+
+
+# Practice plot using ggOceanMaps -----------------------------------------
+
+dt <- data.frame(lon = c(32, 46), lat = c(-52,-45))
+
+
+basemap(data=dt,bathymetry = TRUE) +
+  geom_tile(data = locs[locs$season=='summer',], aes(lon, lat, z = strat_prop),binwidth = 0.08, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_tile(data = dives %>% filter(season=='summer'), aes(lon, lat, z = therm_depth),binwidth = 0.1, stat = "summary_2d", fun = mean)+
+  #geom_point(aes(x = lon , y = lat),data = locs[locs$season=='summer',])+
+  scale_fill_gradientn(name = "T dep [m]",colours = c("grey60", "blue", "orange"), values = c('NA',0.1,1))+
+  geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='green', data = sf_Marion)+
+  geom_point(data = SAF, aes(x = lon, y = lat),size=0.9)+
+  geom_point(data = PF, aes(x = lon, y = lat),size=0.9)+
+  geom_text(data = SAF[which.max(SAF[,"lon"]),], aes(label = name, x = Inf, y=lat),colour='black', hjust = +1, vjust = -1, size=6)+
+  geom_text(data = PF[which.max(PF[,"lon"]),], aes(label = name, x = Inf, y=lat),colour='black', hjust = +1, vjust = -1, size=6)+
+  theme_bw()   +
+  #facet_grid(diel_phase~season)+
+  #scale_x_continuous(name="lon", limits=c(32, 46)) + #summer - name="lon", limits=c(30, 50)
+  #scale_y_continuous(name="lat", limits=c(-52, -45)) + #summer - name="lat", limits=c(-55, -40)
+  xlab("") + 
+  ylab("")  +
+  # labs(fill = "Mean diving \nduration (min)")+
+  ggtitle('Thermocline depth [m]') +
+  theme(plot.title = element_text(size=22,face="bold"),
+        axis.title=element_text(size=18,face="bold"),
+        legend.title = element_text(face="bold",size=18),legend.text = element_text(size=14),legend.key.size = unit(1.0, "cm"),axis.text.x = element_text(size=12),axis.text.y = element_text(size=12))
+
+
+basemap(data=dt,bathymetry = TRUE)+
+  geom_point(aes(x = lon , y = lat),data = locs[locs$season=='summer',], shape=1)

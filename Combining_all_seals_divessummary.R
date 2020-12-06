@@ -179,16 +179,25 @@ dives$season <- as.factor(dives$season)
 # This is from database in C:\Users\Sean Evans\Documents\2020\MSc\Computing\MSc
 Wyear = tibble(year=c(2009,2009,2009,2009,2011,2011,2011,2012,2012,2013,2011,2011,2011,2011,2012,2013,2013,2013,2014),
        season=rep('winter',19),
-       dives %>% group_by(season,sealID) %>% count() %>% filter(season=='winter') %>% select(sealID) %>% ungroup() %>% select(sealID))
+       dives_pdsi %>% group_by(season,sealID) %>% count() %>% filter(season=='winter') %>% select(sealID) %>% ungroup() %>% select(sealID))
        
 Syear = tibble(year=c(2011,2011,2011,2011,2012,2012,2012,2012,2012,2012,2012,2012,2013,2013,2013,2013,2013,2015,2015,2014),
                season=rep('summer',20),
-               dives %>% group_by(season,sealID) %>% count() %>% filter(season=='summer') %>% select(sealID) %>% ungroup() %>% select(sealID))
+               dives_pdsi %>% group_by(season,sealID) %>% count() %>% filter(season=='summer') %>% select(sealID) %>% ungroup() %>% select(sealID))
 
 year_metadata = rbind(Wyear,Syear)
 year_metadata$season = NULL
+#dives
 dives<-full_join(dives,year_metadata,by='sealID')
 dives$year <- as.factor(dives$year)
+#dives_pdsi
+#dives_pdsi<-full_join(dives_pdsi,year_metadata,by='sealID')
+#dives_pdsi$year <- as.factor(dives_pdsi$year)
+#locs
+names(locs)[1] <- "sealID"
+locs$sealID <- as.factor(locs$sealID)
+locs<-full_join(locs,year_metadata,by='sealID')
+locs$year <- as.factor(locs$year)
 
 ##### diel phase to factor
 dives$diel_phase<-as.factor(dives$diel_phase)
@@ -412,6 +421,7 @@ saveRDS(locs,file.path(save_all,"locs.rds"))
 # Reading data
 save_all = 'Plots & Dive Tables/'
 dives = readRDS(file.path(save_all,"dives.rds"))
+dives_pdsi = readRDS(file.path(save_all,"dives_pdsi.rds"))
 locs = readRDS(file.path(save_all,"locs.rds"))
 
 
