@@ -176,6 +176,7 @@ dives[which(dives$JDay>107&dives$JDay<290),]$season = 'winter' # winter (Apr-Sep
 dives[which(dives$JDay<=107|dives$JDay>=290),]$season = 'summer' # summer (Oct-Mar)
 dives$season <- as.factor(dives$season)
 
+
 # This is from database in C:\Users\Sean Evans\Documents\2020\MSc\Computing\MSc
 Wyear = tibble(year=c(2009,2009,2009,2009,2011,2011,2011,2012,2012,2013,2011,2011,2011,2011,2012,2013,2013,2013,2014),
        season=rep('winter',19),
@@ -413,7 +414,13 @@ ggplot(dives %>% filter(JDay>107&JDay<290), aes(x=diel_phase, y=dive_res, fill=d
 dives_pdsi <- dives[dives$pdsi<900,]
 save_all = 'Plots & Dive Tables/'
 saveRDS(dives,file.path(save_all,"dives.rds"))
+## PDSI>=900 removed
+dives_pdsi$WE <- NaN
+dives_pdsi$WE[dives_pdsi$lon>=37.746368] <- 'East'
+dives_pdsi$WE[dives_pdsi$lon<37.746368] <- 'West'
+dives_pdsi$WE <- as.factor(dives_pdsi$WE)
 saveRDS(dives_pdsi,file.path(save_all,"dives_pdsi.rds"))
+
 saveRDS(dives_sr,file.path(save_all,"dives_sr.rds"))
 write.csv(dives_sr,paste0(save_all,"dives_sr.csv"))
 saveRDS(locs,file.path(save_all,"locs.rds"))
@@ -423,9 +430,6 @@ save_all = 'Plots & Dive Tables/'
 dives = readRDS(file.path(save_all,"dives.rds"))
 dives_pdsi = readRDS(file.path(save_all,"dives_pdsi.rds"))
 locs = readRDS(file.path(save_all,"locs.rds"))
-
-
-
 
 
 # Adding divetype to locs as a proportion ---------------------------------

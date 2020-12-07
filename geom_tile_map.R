@@ -7,6 +7,7 @@ library(tidync)
 library(tidyr)
 #install.packages("ggOceanMaps", repos = c("https://mikkovihtakari.github.io/drat", "https://cloud.r-project.org"))
 library(ggOceanMaps)
+library(imager)
 # library('rgeos')
 # Add the Orsifronts
 # library(orsifronts)
@@ -116,22 +117,34 @@ ggplot() +
         legend.title = element_text(face="bold",size=18),legend.text = element_text(size=14),legend.key.size = unit(1.0, "cm"),axis.text.x = element_text(size=12),axis.text.y = element_text(size=12))
 
 ####### Dives strat_prop ######
-y=2015
+summ = c(2011,2012,2013,2014,2015)
+wint = c(2009,2011,2012,2013,2014)
+for (i in 1:length(summ)) {
+y=summ[i]
 n = dives_pdsi %>% filter(season=='summer' & year==y) %>% NROW()
+nT = dives_pdsi %>% filter(season=='summer' & year==y & Thermocline=='present') %>% NROW()
+nw = dives_pdsi %>% filter(season=='summer' & year==y & Thermocline=='present' & lon<37.746368) %>% NROW()
+nwll = tibble('lon'=34.5,'lat'=-45,'n'=paste0('nWesT = ',as.character(nw),' (',as.character(round(nw/(ne+nw),digits=4)*100),'%)'))
+ne = dives_pdsi %>% filter(season=='summer' & year==y & Thermocline=='present' & lon>=37.746368) %>% NROW()
+nell = tibble('lon'=42.5,'lat'=-45,'n'=paste0('nEast = ',as.character(ne),' (',as.character(round(ne/(ne+nw),digits=4)*100),'%)'))
+
+
 ggplot() +
   # geom_polygon(data = ant, aes(x=long, y = lat, group = group),fill="grey", alpha = 0.8)+
   # coord_map("azequidistant", orientation = c(-90, 0, 0)) +
-  geom_tile(data = locs[locs$season=='summer' & locs$year==y,], aes(lon, lat, z = strat_prop),binwidth = 0.08, stat = "summary_2d", fun = mean,na.rm = TRUE)+
+  geom_tile(data = locs[locs$season=='summer' & locs$year==y,], aes(lon, lat, z = strat_prop),binwidth = 0.1, stat = "summary_2d", fun = mean,na.rm = TRUE)+
   geom_tile(data = dives_pdsi %>% filter(season=='summer' & year==y), aes(lon, lat, z = therm_depth),binwidth = 0.1, stat = "summary_2d", fun = mean)+
   #geom_raster(data=bathy_winter,aes(lon, lat, fill = elevation))+
   
   #geom_point(aes(x = lon , y = lat),data = locs[locs$season=='summer',])+
-  scale_fill_gradientn(name = "T dep [m]",colours = c("grey60", "blue", "orange"), values = c('NA',0.1,1))+
+  scale_fill_gradientn(name = "T dep [m]",colours = c("grey60", "blue", "orange"), values = c('NA',0.1,1), limits = c(1,150))+
   geom_point(aes(x = lon , y = lat),pch = 17,size=5, color='green', data = sf_Marion)+
   geom_point(data = SAF, aes(x = lon, y = lat),size=0.9)+
   geom_point(data = PF, aes(x = lon, y = lat),size=0.9)+
   geom_text(data = SAF[which.max(SAF[,"lon"]),], aes(label = name, x = Inf, y=lat),colour='black', hjust = +1, vjust = -1, size=6)+
   geom_text(data = PF[which.max(PF[,"lon"]),], aes(label = name, x = Inf, y=lat),colour='black', hjust = +1, vjust = -1, size=6)+
+  geom_text(data = nwll, aes(label = n, x = lon, y=lat),colour='black', size=4)+
+  geom_text(data = nell, aes(label = n, x = lon, y=lat),colour='black', size=4)+
   theme_bw()   +
   #facet_grid(diel_phase~season)+
   scale_x_continuous(name="lon", limits=c(32, 46)) + #summer - name="lon", limits=c(30, 50)
@@ -139,10 +152,13 @@ ggplot() +
   xlab("") + 
   ylab("")  +
   # labs(fill = "Mean diving \nduration (min)")+
-  ggtitle(paste0('Thermocline depth [m]  n=',as.character(n),' dives (',as.character(y),')')) +
+  ggtitle(paste0('Thermocline depth [m]  n=',as.character(nT),'/',as.character(n),'(',as.character(round(nT/(n+nT),digits=4)*100),'%)',' dives (',as.character(y),')')) +
   theme(plot.title = element_text(size=22,face="bold"),
         axis.title=element_text(size=18,face="bold"),
         legend.title = element_text(face="bold",size=18),legend.text = element_text(size=14),legend.key.size = unit(1.0, "cm"),axis.text.x = element_text(size=12),axis.text.y = element_text(size=12))
+
+ggsave(paste0('C:/Users/Sean Evans/Documents/2020/MSc/Computing/MSc/Plots & Dive Tables/All seals/Exploratory analysis/Tile mapping/Summer/New therm threshold (0.25)/Therm_dep_',as.character(y),'.png'), width = 24, height = 15, units = "cm")
+}
 
 ####### Dives max.d ######
 
