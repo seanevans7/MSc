@@ -40,6 +40,8 @@ library(lme4)
 library(nlme)
 # library(lmerTest)
 library('mgcv')
+library(car)
+library(ggpubr)
 #require(GGally)
 #require(reshape2)
 #require(compiler)
@@ -409,6 +411,7 @@ ggplot(dives %>% filter(JDay>107&JDay<290), aes(x=diel_phase, y=dive_res, fill=d
 
 
 # Saving dives (Not including surface residuals) --------------------------
+# Excluding sealID==57 West dives - too far West to be an East diving seal (Only 30 dives in one night)
 
 # Saving data
 dives_pdsi <- dives[dives$pdsi<900,]
@@ -420,6 +423,11 @@ dives_pdsi$WE[dives_pdsi$lon>=37.746368] <- 'East'
 dives_pdsi$WE[dives_pdsi$lon<37.746368] <- 'West'
 dives_pdsi$WE <- as.factor(dives_pdsi$WE)
 saveRDS(dives_pdsi,file.path(save_all,"dives_pdsi.rds"))
+
+excludes <- dives_pdsi %>% filter(sealID==57 & lon>=37.746368)
+diving<-anti_join(dives_pdsi,excludes)
+saveRDS(diving,file.path(save_all,"diving.rds"))
+diving<-readRDS(file.path(save_all,'diving.rds'))
 
 saveRDS(dives_sr,file.path(save_all,"dives_sr.rds"))
 write.csv(dives_sr,paste0(save_all,"dives_sr.csv"))
@@ -687,6 +695,8 @@ dives$ft[(which(dives$sealID == 22 & is.na(dives$ft)))] <- 4
 qplot(lat,Nt, data = dives)+theme_bw()+facet_wrap(~season)
 qplot(lon,Nt, data = dives)+theme_bw()+facet_wrap(~season)
 
+
+
 qplot(lat,Nt, data = dives)+theme_bw()+facet_grid() #plot for two variables
 
 table(dives$Thermocline,dives$season)
@@ -764,32 +774,6 @@ ggplot(dives, aes(bear.deg, fill=season))+
 
 M3 = glmer(Thermocline ~ scale(max.d) + (1|sealID), family = binomial(link = "logit"), data=dives)
 summary(M3)
-
-#### Thermocline absent vs present and hunting dive or not (based on ht-rat) - table
-no.of.dives <- dives %>% group_by(Thermocline) %>% count() %>% t()
-
-dives$hunting <- NaN
-dives[which(dives$ht_rat==0),]$hunting = 'transit' 
-dives[which(dives$ht_rat>0),]$hunting = 'hunting' 
-
-
-Therm_table<- dives %>% group_by(Thermocline) %>% 
-  summarise('Dive_duration' = mean(all.dur),
-            'Dive_depth' = mean(max.d),
-            'Bottom_time' = mean(bottom_time),
-            'vARS' = mean(ht_rat),
-            'Dive_residual' = mean(dive_res),
-            'Dive_efficiency' = mean(dive_efficiency),
-            'Nt' = mean(Nt),
-            'Temp' = mean(mean_Temp),
-            'dist_to_thermocline' = mean(hunt_diff_Therm),
-            'Mdepth_hunting' = mean(Mdepth_hunting),
-            'hunt_diff_therm' = mean(na.omit(hunt_diff_Therm)),
-            'max_diff_therm' = mean(na.omit(max_diff_Therm))) %>% t() 
-colnames(Therm_table) <- Therm_table[1,]
-Therm_table<-Therm_table[-1,]
-Therm_table
-
 
 # Assessing bouts ---------------------------------------------------------
 
@@ -900,3 +884,215 @@ ggplot(dives)+
         axis.title=element_text(size=18,face="bold"),
         legend.title = element_text(face="bold",size=18),axis.text.x = element_text(size=12),axis.text.y = element_text(size=12))
 rm(grob1,grob2,grob3,grob4,grob5)
+
+
+
+## Percentage of locations within the area over which geostrophic velocities have been averaged (between -42 and -50 lat)
+(locs %>% filter(lat<=-42 & lat>=-50) %>% NROW())/(locs %>% NROW())
+
+## Table of summer vs winter gernal seal movements
+diving %>% filter(season=='winter') %>% summary()
+(diving %>% filter(season=='summer'))$dive_res %>%  sd(na.rm = TRUE)
+(diving %>% group_by(season,sealID,ft) %>% summarise(sum_ht = sum(hunting_time)) %>% filter(season=='summmer'))$sum_ht %>% summary()
+diving %>% group_by(season) %>% summarise()
+
+#### Thermocline absent vs present and hunting dive or not (based on ht-rat) - table
+no.of.dives <- dives %>% group_by(Thermocline) %>% count() %>% t()
+
+dives$hunting <- NaN
+dives[which(dives$ht_rat==0),]$hunting = 'transit' 
+dives[which(dives$ht_rat>0),]$hunting = 'hunting' 
+
+
+Therm_table<- diving %>% group_by(Thermocline) %>% 
+  summarise('Dive_duration' = mean(all.dur),
+            'Dive_depth' = mean(max.d),
+            'Bottom_time' = mean(bottom_time),
+            'vARS' = mean(ht_rat),
+            'Dive_residual' = mean(dive_res),
+            'Dive_efficiency' = mean(dive_efficiency),
+            'Nt' = mean(Nt),
+            'Temp' = mean(mean_Temp),
+            'dist_to_thermocline' = mean(hunt_diff_Therm),
+            'Mdepth_hunting' = mean(Mdepth_hunting),
+            'hunt_diff_therm' = mean(na.omit(hunt_diff_Therm)),
+            'max_diff_therm' = mean(na.omit(max_diff_Therm))) %>% t() 
+colnames(Therm_table) <- Therm_table[1,]
+Therm_table<-Therm_table[-1,]
+Therm_table
+
+# Groupby season & Thermocline
+Table<- diving %>% group_by(season,WE,Thermocline) %>% 
+  summarise('dives' = n(),
+            'Dive_duration' = paste0(as.character(round(mean(all.dur),2)),' (',as.character(round(sd(all.dur),2)),')'),
+            'Dive_depth' = paste0(as.character(round(mean(max.d),2)),' (',as.character(round(sd(max.d),2)),')'),
+            'Bottom_time' = paste0(as.character(round(mean(bottom_time),2)),' (',as.character(round(sd(bottom_time),2)),')'),
+            'vARS' = paste0(as.character(round(mean(ht_rat),2)),' (',as.character(round(sd(ht_rat),2)),')'),
+            'Dive_residual' = paste0(as.character(round(mean(dive_res),2)),' (',as.character(round(sd(dive_res),2)),')'),
+            'Dive_efficiency' = paste0(as.character(round(mean(dive_efficiency),2)),' (',as.character(round(sd(dive_efficiency),2)),')'),
+            'Nt' = paste0(as.character(round(mean(Nt),2)),' (',as.character(round(sd(Nt),2)),')'),
+            'Temp' = paste0(as.character(round(mean(mean_Temp),2)),' (',as.character(round(sd(mean_Temp),2)),')'),
+            'dist_to_thermocline' = paste0(as.character(round(mean(na.omit(hunt_diff_Therm)),2)),' (',as.character(round(sd(na.omit(hunt_diff_Therm)),2)),')'),
+            'Mdepth_hunting' = paste0(as.character(round(mean(na.omit(Mdepth_hunting)),2)),' (',as.character(round(sd(na.omit(Mdepth_hunting)),2)),')'),
+            'max_diff_therm' = paste0(as.character(round(mean(na.omit(max_diff_Therm)),2)),' (',as.character(round(sd(na.omit(max_diff_Therm)),2)),')')) %>% t() 
+
+
+### T-tests 
+multi.tests <- function(fun = t.test, df, vars, group.var, ...) {
+  sapply(simplify = FALSE,                                    # sapply(simplify=T) better, elements named
+         vars,                                                # loop on vector of outcome variable names
+         function(var) {
+           formula <- as.formula(paste(var, "~", group.var))# create a formula with outcome and grouping var.
+           fun(data = df, formula, ...)                     # perform test with a given fun, default t.test
+         }
+  )
+}
+
+
+# One-Way Anova -----------------------------------------------------------
+
+# One-way Anova assumes normality and equal variance!
+
+diving %>% group_by(season) %>%
+  summarise(
+    count = n(),
+    mean = mean(max.d, na.rm = TRUE),
+    sd = sd(max.d, na.rm = TRUE)
+  )
+M1<-aov(max.d~season,diving)
+summary(M1)
+TukeyHSD(M1)
+plot(M1,1) #Checking homogeneity of variances
+leveneTest(max.d ~season, diving) # Testing for equal variances 
+# There is evidence to suggest that the variances across groups is statistically significantly different. Therefore cannot assume homogeneity of variances in the different treatment groups 
+## Anova test with no assumption of equal variances (Welch one-way test)
+oneway.test(max.d ~season, diving)
+pairwise.t.test(diving$max.d, diving$season,p.adjust.method = "BH", pool.sd = FALSE)
+## Testing for normality
+plot(M1,2) #dots should follow line - way off means data is not normal
+## Test further
+# Extract the residuals
+aov_residuals <- residuals(object = M1)
+# Run Shapiro-Wilk test
+shapiro.test(x = aov_residuals[0:5000]) #H0 = normality
+
+res.multi.t.tests <- multi.tests(fun = t.test,df = diving,vars = c("max.d","all.dur"),group.var = "season",var.equal = TRUE)
+res.multi.t.tests
+## p-values can be extracted from the result object
+data.frame(p.value = sapply(res.multi.t.tests, getElement, name = "p.value"))
+#Multiple ANOVA: Make sure the grouping variable is a factor (categorical variable in R)
+res.multi.anova <-  multi.tests(fun = oneway.test,df = diving,vars = c("max.d","all.dur"),group.var = "season",var.equal = TRUE)
+res.multi.anova
+
+# Kruskal-Wallis test -----------------------------------------------------
+
+# When Anova assumptions are not met use a non-parametric alternative to a one-way anova called Kruskal-Wallis rank sum test
+kruskal.test(max.d ~season, data = diving)
+#p-value less than significance level 0.05 suggests significant difference between treatment groups
+pairwise.wilcox.test(diving$max.d, diving$season,p.adjust.method = "BH")#, pool.sd = FALSE)
+
+#Multiple Kruskal-Wallis tests
+res.multi.kruskal.tests <-multi.tests(fun = kruskal.test,df = diving,vars = c("max.d","all.dur"),group.var = "WE")
+res.multi.kruskal.tests
+#Multiple plotting
+plots <- multi.tests(fun = plot,df = diving,vars = c("max.d","all.dur"),group.var = "WE")
+statistics <- multi.tests(fun = summary,df = diving,vars = c("max.d","all.dur"),group.var = "WE")
+
+
+diving %>% filter(max.d<10) %>% view()
+
+diving$hr <- as.factor(strftime(diving$start-3600*2, format="%H"))
+diving$hr <- factor(diving$hr , levels=c("12","13","14","15","16","17","18", "19", "20", "21", "22", "23", "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"))
+qplot(hr,max.d, data = diving)+theme_bw()+facet_wrap(~season)
+
+### Plotting max depth per hour boxplot with sample size shown
+diving$hr <- as.numeric(strftime(diving$start-3600*2, format="%H"))
+hr_labels <- diving %>% group_by(season,hr) %>% count()
+hr_labels <- (hr_labels %>% filter(season=='summer' & (hr>13 | hr<6))) %>% ungroup() %>%  dplyr::select(hr,n)
+hr_labels$n <- as.character(hr_labels$n)
+colnames(hr_labels)[2] <- 'hr_n'
+sdiving <- diving %>% filter(season=='summer' & (hr>13 | hr<6))
+sdive <- full_join(sdiving,hr_labels,by='hr')
+hr_labels <- diving %>% group_by(season,hr) %>% count()
+hr_labels <- (hr_labels %>% filter(season=='winter' & (hr>13 | hr<6))) %>% ungroup() %>%  dplyr::select(hr,n)
+hr_labels$n <- as.character(hr_labels$n)
+colnames(hr_labels)[2] <- 'hr_n'
+wdiving = diving %>% filter(season=='winter' & (hr>13 | hr<6))
+wdive = full_join(wdiving,hr_labels,by='hr')
+
+divings <- rbind(sdive,wdive)
+rm(hr_labels,sdive,wdive)
+
+# ggplot(divings)+
+#   geom_boxplot(aes(hr,max.d,fill=hr_n))+
+#   #geom_vline(aes(xintercept = 107),size=1, col='blue')+
+#   #geom_vline(aes(xintercept = 290),size=1, col='red')+
+#   facet_wrap(~season)
+
+library(RColorBrewer)
+colourCount = length(unique(divings$hr))
+divings$hr = as.factor(divings$hr)
+divings$hr <- factor(divings$hr , levels=c("14","15","16","17","18", "19", "20", "21", "22", "23", "0", "1", "2", "3", "4", "5"))
+divings$hr_n = as.factor(divings$hr_n)
+
+divings$hr_n <- factor(divings$hr_n , labels = c("14","15","16","17","18", "19", "20", "21", "22", "23", "0", "1", "2", "3", "4", "5"))
+
+getPalette = colorRampPalette(brewer.pal(9, "Set1"))
+mycol = list("#874F6F" ,"#E41A1C" ,"#3881B0", "#449B75","#999999", "#56A255" ,"#7E6E85", "#CB8CAD" ,"#AC5782", "#E3712B", "#FFA10D", "#FFE528", "#E1C62F","#B16C29", "#C66764" ,"#F17EB4" )
+
+ggplot()+
+  geom_boxplot(data = divings %>% filter(season=='summer'),aes(hr,max.d,color=hr_n),outlier.shape = NaN,lwd=0.725)+
+  #scale_fill_brewer(palette="Dark2")+
+  #scale_fill_manual(values = getPalette(colourCount))+
+  scale_fill_manual(values = mycol)+
+  theme_bw()+
+  ggtitle("Summer")
+  #geom_point(data = hr_labels,aes(hr,n))+
+  #scale_y_continuous(name = 'max.d',sec.axis=sec_axis(~.*n,name = 'n'))+
+  #theme_ipsum()
+
+ggplot(divings %>% filter(season=='winter'),aes(hr,max.d,color=hr_n))+
+  geom_boxplot(outlier.shape=NA,lwd=0.725)+
+  #scale_fill_brewer(palette="BuPu")+
+  #scale_fill_manual(values = getPalette(colourCount))+
+  scale_fill_manual(values = mycol)+
+  theme_bw()+
+  ggtitle("Winter")
+
+
+
+
+
+ggplot()+
+  geom_boxplot(data = divings %>% filter(season=='winter'),aes(hr,max.d,color=hr),outlier.shape = NaN,lwd=0.725)+
+  #scale_fill_brewer(palette="Dark2")+
+  #scale_fill_manual(values = getPalette(colourCount))+
+  scale_fill_manual(values = mycol)+
+  theme_bw()+
+  ggtitle("Winter")
+hr_labels <- diving %>% group_by(season,hr) %>% count()
+(hr_labels %>% filter(season=='winter' & (hr>13 | hr<6))) %>% ungroup() %>%  dplyr::select(hr,n) %>% view()
+
+
+ggplot(data = locs,aes(x=lat,color=season,fill=season))+
+  geom_density(alpha=0.4)+
+  geom_histogram(aes(y=..density..), colour="black", fill="white",bins=100,alpha=0)+
+  geom_vline(aes(xintercept = -46.893361),size=1, col='blue',linetype="dashed")+
+  annotate(geom="text", x=-50, y=1, label="South",color="black")+
+  annotate(geom="text", x=-43.5, y=1, label="North",color="black")+
+  theme(legend.position="right")+
+  theme_classic()+ #theme_minimal()
+  coord_flip()
+  
+
+
+ggplot(data = locs,aes(x=lon,color=season,fill=season))+
+  geom_density(alpha=0.4)+
+  geom_histogram(aes(y=..density..), colour="black", fill="white",bins=50,alpha=0)+
+  geom_vline(aes(xintercept = 37.746368),size=1, col='blue',linetype="dashed")+
+  annotate(geom="text", x=30, y=0.17, label="West",color="black")+
+  annotate(geom="text", x=46, y=0.17, label="East",color="black")+
+  theme(legend.position="right")+
+  theme_classic() #theme_minimal()
+
+    

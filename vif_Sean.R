@@ -14,6 +14,7 @@
 # May have to re-install some packages after updating R, because the latest version of Rtools might not be downloaded.
 # installr::install.Rtools()
 # remotes::install_cran("dplyr", force = TRUE)
+library('mgcv')
 library(remotes)
 library(purrr)
 library(move)
@@ -62,15 +63,15 @@ library('ggraph')
 # Or use car::vif()
 
 # Read in data.frame of variables-------------
-new_my_data <- dives[dives$pdsi<900,] %>% na.omit()
-
+# new_my_data <- dives[dives$pdsi<900,]
+new_my_data <- dives[dives$pdsi<900 & dives$ht_rat!=0,]
 summary(new_my_data)
 
-# summer & winter
+# summer & winter 
 winter_dives <- new_my_data[new_my_data$season=='winter',]
 summer_dives <- new_my_data[new_my_data$season=='summer',]
 #Center and scale data
-df <- as.data.frame(base::scale(summer_dives[,c('all.dur','dive_efficiency','ht_rat'
+df <- as.data.frame(base::scale(winter_dives[,c('all.dur','dive_efficiency','ht_rat'
                                                ,'hARS_mode','max.d','pdsi','bottom_time',
                                                'dive_res','hunting_time','X.bt.dt')], center = TRUE, scale = TRUE))
 
