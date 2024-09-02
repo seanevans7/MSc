@@ -49,12 +49,11 @@ source("myFunctions.R")
 setwd("~/2020/MSc/Computing/Fur seals/Dive data for Sean Evans")
 data_path = "Extracted raw dive data - from instrument helper/Fur seal data/dt_before_TDR"
 # Saving files in MSc
-save_bsm_seg_df = "bsm_seg_df"
-save_df_init_tmp2 = "df_init_tmp2"
-save_divestats = "divestats"
-save_loc1 = "loc1"
-save_dbs = "dbs"
-save_ndbs = "ndbs"
+save_bsm_seg_df = "bsm_seg_df" #Broken Stick Model segments of shortlisted dives for both Optimal and Set npoint methods
+save_df_init_tmp2 = "df_init_tmp2" #dataframe for all dives in total before shortlisting to analyze
+save_divestats = "divestats" #shortlisted dives chosen based on duration and depth filters: max.d > 4, all.dur > 60
+save_dbs = "dbs" #Broken stick dataframe - Optimal npoints
+save_ndbs = "ndbs" #Broken stick dataframe - Set npoints
 # Data Structuring -------------------------------------------------
 
 ##############################################################################################################################
